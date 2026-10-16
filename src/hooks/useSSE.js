@@ -146,11 +146,12 @@ export const useSSE = () => {
               eventData.type === 'chore.updated' ||
               eventData.type === 'chore.status'
             ) {
+              // String id to match the key ChoreView builds from the URL param
               queryClient.invalidateQueries({
-                queryKey: ['choreDetails', updatedChore.id],
+                queryKey: ['choreDetails', String(updatedChore.id)],
               })
               queryClient.refetchQueries({
-                queryKey: ['choreDetails', updatedChore.id],
+                queryKey: ['choreDetails', String(updatedChore.id)],
               })
             }
 

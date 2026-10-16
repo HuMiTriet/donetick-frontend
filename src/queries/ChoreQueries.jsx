@@ -326,6 +326,11 @@ export const useUpdateChore = () => {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['chores'] })
       queryClient.invalidateQueries({
+        predicate: query =>
+          ['chore', 'choreDetails'].includes(query.queryKey[0]) &&
+          String(query.queryKey[1]) === String(variables.id),
+      })
+      queryClient.invalidateQueries({
         queryKey: ['choreHistory', variables.id],
       })
       queryClient.invalidateQueries({ queryKey: ['pendingCommands'] })

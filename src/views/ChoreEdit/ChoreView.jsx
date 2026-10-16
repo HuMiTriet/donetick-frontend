@@ -83,6 +83,7 @@ import {
 } from '../../utils/Fetcher'
 import { offlineDB } from '../../utils/OfflineDB'
 import { getSafeBottomPadding } from '../../utils/SafeAreaUtils.js'
+import { removeEmptySubTasks } from '../../utils/SubTasks'
 import ChoreActionMenu from '../components/ChoreActionMenu'
 import DueDatePickerModal, {
   combineDueDate,
@@ -814,6 +815,7 @@ const ChoreView = () => {
       </Container>
     )
   }
+  const subTasks = removeEmptySubTasks(chore.subTasks)
   return (
     <Container
       maxWidth='sm'
@@ -1208,7 +1210,7 @@ const ChoreView = () => {
             </Sheet>
           </>
         )}
-        {chore.subTasks && chore.subTasks.length > 0 && (
+        {subTasks?.length > 0 && (
           <Box sx={{ p: 0, m: 0, mb: 2 }}>
             <Typography level='title-md' sx={{ mb: 1 }}>
               {t('choreView.subtasksLabel')}
@@ -1225,7 +1227,7 @@ const ChoreView = () => {
               <SubTasks
                 editMode={false}
                 performers={performers}
-                tasks={chore.subTasks}
+                tasks={subTasks}
                 setTasks={tasks => {
                   setChore({
                     ...chore,

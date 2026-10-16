@@ -48,3 +48,4 @@ vendor/bundle
 # Claude Code skills cache
 .agents/
 skills-lock.json
+/tags

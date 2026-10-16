@@ -37,6 +37,7 @@ import {
   getProjectAudienceIds,
 } from '../../utils/ProjectAccess'
 import { getIconComponent } from '../../utils/ProjectIcons'
+import { removeEmptySubTasks } from '../../utils/SubTasks'
 import { generateUUID } from '../../utils/UUID'
 import { useLabels } from '../Labels/LabelQueries'
 import { useProjects } from '../Projects/ProjectQueries'
@@ -1067,6 +1068,7 @@ const TaskInput = ({ initialMode, isModalOpen, onChoreUpdate, onClose }) => {
     // and never archives them on completion (see RepeatSection.jsx for the
     // full-edit-form equivalent).
     const isAlwaysAvailable = frequency?.frequencyType === 'always'
+    const savedSubTasks = removeEmptySubTasks(subTasks)
 
     const chore = {
       name: taskTitle,
@@ -1095,7 +1097,7 @@ const TaskInput = ({ initialMode, isModalOpen, onChoreUpdate, onClose }) => {
       frequencyMetadata: {},
       notification: false,
       notificationMetadata: {},
-      subTasks: subTasks?.length > 0 ? subTasks : null,
+      subTasks: savedSubTasks?.length > 0 ? savedSubTasks : null,
       projectId: projectId === 'default' ? null : projectId,
       draftId: draftId,
       source: taskSourceRef.current,

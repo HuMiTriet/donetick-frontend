@@ -103,6 +103,7 @@ import {
 } from '../../utils/ProjectAccess'
 import { getIconComponent } from '../../utils/ProjectIcons'
 import { getSafeBottomPadding } from '../../utils/SafeAreaUtils.js'
+import { removeEmptySubTasks } from '../../utils/SubTasks'
 import { useSinglePageTaskEditor } from '../../utils/TaskEditorPreferences'
 import { generateUUID } from '../../utils/UUID'
 import { useProjectFilter } from '../Chores/hooks/useProjectFilter.js'
@@ -640,7 +641,7 @@ const ChoreEdit = () => {
       notification: isNotificable && planReminders.length > 0,
       labels: labels.map(l => l.name),
       labelsV2: labelsV2,
-      subTasks: subTasks,
+      subTasks: removeEmptySubTasks(subTasks),
       notificationMetadata: {
         ...notificationMetadata,
         templates: planReminders,
@@ -2357,11 +2358,13 @@ const ChoreEdit = () => {
                 section='subtasks'
                 collapsible
                 defaultOpen={Boolean(subTasks?.length)}
-                summary={
-                  subTasks?.length
-                    ? `${subTasks.length} subtask${subTasks.length === 1 ? '' : 's'}`
+                summary={(() => {
+                  // Blank rows are dropped on save, so don't count them
+                  const count = removeEmptySubTasks(subTasks)?.length
+                  return count
+                    ? `${count} subtask${count === 1 ? '' : 's'}`
                     : 'A checklist of steps to complete this task'
-                }
+                })()}
               >
                 <Box>
                   {/* <FormControl sx={{ mt: 1 }}>
