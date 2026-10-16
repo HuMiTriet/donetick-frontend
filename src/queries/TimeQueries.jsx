@@ -10,6 +10,12 @@ import {
   UpdateTimeSession,
 } from '../utils/Fetcher'
 
+const parseTimerResponse = async response => {
+  const body = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(body?.error || 'Request failed')
+  return body
+}
+
 export const useChoreTimer = choreId => {
   return useQuery({
     queryKey: ['choreTimer', choreId],
@@ -31,9 +37,10 @@ export const useStartChore = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: StartChore,
+    mutationFn: choreId => StartChore(choreId).then(parseTimerResponse),
     onSuccess: (_, choreId) => {
       queryClient.invalidateQueries({ queryKey: ['choreTimer', choreId] })
+      queryClient.invalidateQueries({ queryKey: ['choreDetails', choreId] })
       queryClient.invalidateQueries({ queryKey: ['chores'] })
       queryClient.invalidateQueries({ queryKey: ['choreHistory', choreId] })
     },
@@ -44,9 +51,10 @@ export const usePauseChore = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: PauseChore,
+    mutationFn: choreId => PauseChore(choreId).then(parseTimerResponse),
     onSuccess: (_, choreId) => {
       queryClient.invalidateQueries({ queryKey: ['choreTimer', choreId] })
+      queryClient.invalidateQueries({ queryKey: ['choreDetails', choreId] })
       queryClient.invalidateQueries({ queryKey: ['chores'] })
       queryClient.invalidateQueries({ queryKey: ['choreHistory', choreId] })
     },

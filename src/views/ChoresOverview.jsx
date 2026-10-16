@@ -27,6 +27,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 
+import { celebrate } from '../utils/Celebrate'
 import { GetAllUsers, GetChores, MarkChoreComplete } from '../utils/Fetcher'
 import DateModal from './Modals/Inputs/DateModal'
 // import moment from 'moment'
@@ -266,6 +267,7 @@ const ChoresOverview = () => {
                       MarkChoreComplete(chore.id, null, null, null).then(
                         response => {
                           if (response.ok) {
+                            celebrate()
                             response.json().then(data => {
                               const newChore = data.res
                               const newChores = [...chores]
@@ -329,6 +331,7 @@ const ChoresOverview = () => {
           MarkChoreComplete(choreId, null, date, activeUserId).then(
             response => {
               if (response.ok) {
+                celebrate()
                 response.json().then(data => {
                   const newChore = data.res
                   const newChores = [...chores]
@@ -347,3 +350,4 @@ const ChoresOverview = () => {
 }
 
 export default ChoresOverview
+

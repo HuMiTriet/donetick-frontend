@@ -8,6 +8,7 @@ import {
   useUnArchiveChore,
 } from '../../../queries/ChoreQueries'
 import { usePauseChore, useStartChore } from '../../../queries/TimeQueries'
+import { celebrate } from '../../../utils/Celebrate'
 import { commandQueue, CommandType } from '../../../utils/CommandQueue'
 import {
   ApproveChore,
@@ -208,6 +209,7 @@ export const useChoreActions = ({
               null,
             )
             if (response.ok) {
+              celebrate()
               // Online: hide the chore and show undo
               setChores(prev => prev.filter(c => c.id !== chore.id))
               queryClient.setQueriesData({ queryKey: ['chores'] }, oldData => {
@@ -268,6 +270,7 @@ export const useChoreActions = ({
                 pending: true,
               })
               queryClient.invalidateQueries({ queryKey: ['pendingCommands'] })
+              celebrate()
               showSuccess({
                 title: t('actions.completionPending'),
                 message:
@@ -291,18 +294,21 @@ export const useChoreActions = ({
         case 'start': {
           const startedChore = { ...chore, status: 1 }
           try {
-            await startChore.mutateAsync(chore.id)
+            const data = await startChore.mutateAsync(chore.id)
+            // Merge the server's timer fields (timerUpdatedAt, duration,
+            // syncVersion) so the cached chore matches the backend.
+            const updatedChore = { ...startedChore, ...data?.res }
             queryClient.cancelQueries({ queryKey: ['chores'] })
             queryClient.setQueryData(['chores', false], oldData => {
               if (!oldData?.res) return oldData
               return {
                 ...oldData,
                 res: oldData.res.map(c =>
-                  c.id === chore.id ? startedChore : c,
+                  c.id === chore.id ? updatedChore : c,
                 ),
               }
             })
-            updateChoreInState(startedChore, 'started', {
+            updateChoreInState(updatedChore, 'started', {
               skipInvalidation: true,
             })
           } catch (error) {
@@ -344,18 +350,21 @@ export const useChoreActions = ({
         case 'pause': {
           const pausedChore = { ...chore, status: 2 }
           try {
-            await pauseChore.mutateAsync(chore.id)
+            const data = await pauseChore.mutateAsync(chore.id)
+            // Merge the server's timer fields (timerUpdatedAt, duration,
+            // syncVersion) so the cached chore matches the backend.
+            const updatedChore = { ...pausedChore, ...data?.res }
             queryClient.cancelQueries({ queryKey: ['chores'] })
             queryClient.setQueryData(['chores', false], oldData => {
               if (!oldData?.res) return oldData
               return {
                 ...oldData,
                 res: oldData.res.map(c =>
-                  c.id === chore.id ? pausedChore : c,
+                  c.id === chore.id ? updatedChore : c,
                 ),
               }
             })
-            updateChoreInState(pausedChore, 'paused', {
+            updateChoreInState(updatedChore, 'paused', {
               skipInvalidation: true,
             })
           } catch (error) {
@@ -802,6 +811,7 @@ export const useChoreActions = ({
         null,
       ).then(response => {
         if (response.ok) {
+          celebrate()
           response.json().then(data => {
             const newChore = data.res
             updateChoreInState(newChore, 'completed')
@@ -862,6 +872,7 @@ export const useChoreActions = ({
         null,
       ).then(response => {
         if (response.ok) {
+          celebrate()
           response.json().then(data => {
             const newChore = data.res
             updateChoreInState(newChore, 'completed')
@@ -1044,6 +1055,8 @@ export const useChoreActions = ({
             null,
           ),
         ),
+      // One burst for the whole batch, not one per task.
+      onSucceeded: () => celebrate(),
       successTitle: t('actions.bulk.completedTitle'),
       successVerb: 'Completed',
       failureVerb: 'completed',

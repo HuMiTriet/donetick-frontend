@@ -57,6 +57,7 @@ import {
 } from '../../queries/TimeQueries'
 import { useCircleMembers, useUserProfile } from '../../queries/UserQueries.jsx'
 import { useNotification } from '../../service/NotificationProvider'
+import { celebrate } from '../../utils/Celebrate'
 import {
   ChoreHistoryStatus,
   ChoreStatus,
@@ -274,6 +275,7 @@ const ChoreView = () => {
         null,
       )
       if (resp.ok) {
+        celebrate()
         const data = await resp.json()
         setNote(null)
         setChore(data.res)
@@ -338,6 +340,7 @@ const ChoreView = () => {
           pending: true,
         })
         queryClient.invalidateQueries({ queryKey: ['pendingCommands'] })
+        celebrate()
         showSuccess({
           message: t('choreView.offlineComplete'),
           undoAction: async () => {
@@ -415,11 +418,7 @@ const ChoreView = () => {
     const startedChore = { ...chore, status: ChoreStatus.ACTIVE }
     startChore.mutate(choreId, {
       onSuccess: data => {
-        const newChore = {
-          ...chore,
-          ...data.res,
-        }
-        setChore(newChore)
+        setChore({ ...startedChore, ...data?.res })
       },
       onError: async error => {
         if (isNetworkError(error)) {
@@ -454,11 +453,7 @@ const ChoreView = () => {
     const pausedChore = { ...chore, status: ChoreStatus.PAUSED }
     pauseChore.mutate(choreId, {
       onSuccess: data => {
-        const newChore = {
-          ...chore,
-          ...data.res,
-        }
-        setChore(newChore)
+        setChore({ ...pausedChore, ...data?.res })
       },
       onError: async error => {
         if (isNetworkError(error)) {
