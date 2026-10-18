@@ -19,13 +19,16 @@ import {
   Typography,
 } from '@mui/joy'
 import moment from 'moment'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Calendar from 'react-calendar'
 import { useTranslation } from 'react-i18next'
 
 import ModalActions from '../../components/common/ModalActions'
 import { useLocalization } from '../../contexts/LocalizationContext'
 import { useResponsiveModal } from '../../hooks/useResponsiveModal'
+import { useChores } from '../../queries/ChoreQueries'
+import CalendarChoreDots, { groupChoresByDay } from './CalendarChoreDots'
+import CalendarDayTasks, { CalendarPriorityLegend } from './CalendarDayTasks'
 
 // 23:59(:59) is the app-wide "no specific time" stamp — the same one
 // ChoreEdit, AddTaskModal, and the bulk reschedule handler write. Keep this in
@@ -99,11 +102,16 @@ const toDateKey = date => moment(date).format('YYYY-MM-DD')
  * The shared due-date picker UI (quick dates, quick times, calendar, custom
  * time). Used both by DueDatePickerField and by anything that needs to
  * reschedule a task — task cards, swipe actions, action menus.
+ *
+ * Like the sidepanel's Calendar Overview, the calendar marks each day's tasks
+ * with priority dots and lists the tasks due on the selected day.
+ * `excludeChoreIds` leaves out the task(s) being rescheduled.
  */
 const DueDatePickerModal = ({
   applyLabel,
   dueDateOnly,
   dueTime,
+  excludeChoreIds,
   onApply,
   onClose,
   onRemove,
@@ -114,6 +122,18 @@ const DueDatePickerModal = ({
   const { t } = useTranslation('chores')
   const { ResponsiveModal } = useResponsiveModal()
   const { firstDayOfWeek } = useLocalization()
+  const { data: choresData } = useChores(false, { enabled: open })
+
+  const calendarChores = useMemo(() => {
+    const excluded = new Set(excludeChoreIds)
+    return (choresData?.res ?? []).filter(
+      chore => chore.nextDueDate && !excluded.has(chore.id),
+    )
+  }, [choresData?.res, excludeChoreIds])
+  const choresByDay = useMemo(
+    () => groupChoresByDay(calendarChores),
+    [calendarChores],
+  )
 
   // Local buffered state — only committed on Apply
   const [localDueDateOnly, setLocalDueDateOnly] = useState(dueDateOnly)
@@ -432,10 +452,11 @@ const DueDatePickerModal = ({
                 background: 'var(--joy-palette-neutral-softBg)',
               },
             },
-            // Day tiles only — circular
+            // Day tiles only — circular, and the anchor for the priority dots
             '& .react-calendar__month-view__days .react-calendar__tile': {
               aspectRatio: '1',
               borderRadius: '50%',
+              position: 'relative',
             },
             // Month tiles (year view) — pill shape, no huge circle
             '& .react-calendar__year-view .react-calendar__tile': {
@@ -487,6 +508,13 @@ const DueDatePickerModal = ({
             }
             calendarType={calendarType}
             onChange={handleCalendarChange}
+            tileContent={({ date, view }) =>
+              view === 'month' ? (
+                <CalendarChoreDots
+                  dayChores={choresByDay.get(toDateKey(date))}
+                />
+              ) : null
+            }
             formatShortWeekday={(locale, date) =>
               ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'][date.getDay()]
             }
@@ -508,6 +536,19 @@ const DueDatePickerModal = ({
             }
           />
         </Box>
+        {/* Tasks already due on the picked day, or the dot legend until a day is picked */}
+        {localDueDateOnly ? (
+          <CalendarDayTasks
+            chores={calendarChores}
+            date={new Date(`${localDueDateOnly}T00:00:00`)}
+            sx={{ mt: 0, mb: 1.5, gap: 1 }}
+          />
+        ) : (
+          <CalendarPriorityLegend
+            chores={calendarChores}
+            sx={{ ml: 0, mt: 0, mb: 1.5 }}
+          />
+        )}
         <Typography
           level='body-xs'
           sx={{

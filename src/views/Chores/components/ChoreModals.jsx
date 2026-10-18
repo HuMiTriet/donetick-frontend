@@ -36,6 +36,7 @@ const ChoreModals = ({
           key={'changeDueDate' + modalChore.id}
           title={t('modals.changeDueDate')}
           {...splitDueDate(modalChore.nextDueDate)}
+          excludeChoreIds={[modalChore.id]}
           onClose={onClose}
           onApply={parts =>
             onChangeDueDate(combineDueDate(parts)?.toISOString() ?? null)

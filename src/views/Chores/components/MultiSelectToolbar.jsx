@@ -144,6 +144,7 @@ const MultiSelectToolbar = ({
   onToggleLabel,
   projects = [],
   selectAllDisabled,
+  selectedChoreIds,
   selectedCount,
   selectionSummary,
   showKeyboardShortcuts,
@@ -803,6 +804,7 @@ const MultiSelectToolbar = ({
           {...splitDueDate(
             summary.dueDate?.isMixed ? null : summary.dueDate?.value,
           )}
+          excludeChoreIds={selectedChoreIds}
           onClose={() => setDueDatePickerOpen(false)}
           onApply={parts => {
             setDueDatePickerOpen(false)

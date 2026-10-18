@@ -1238,6 +1238,7 @@ const MyChores = () => {
 
         <MultiSelectToolbar
           isVisible={isMultiSelectMode}
+          selectedChoreIds={selectedChores}
           selectedCount={selectedChores.size}
           onSelectAll={() =>
             selectAllVisibleChores(
