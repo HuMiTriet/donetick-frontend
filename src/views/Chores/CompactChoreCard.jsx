@@ -33,6 +33,7 @@ import {
   openExternalUrl,
   splitTextAtFirstHttpUrl,
 } from '../../utils/ExternalLinks.js'
+import { stripHtml } from '../../utils/Helpers.jsx'
 import ChoreActionMenu, {
   ChoreActionMenuTrigger,
 } from '../components/ChoreActionMenu'
@@ -146,6 +147,9 @@ const CompactChoreCard = ({
   } = splitTextAtFirstHttpUrl(chore.name)
   const descriptionUrl = getFirstHttpUrl(chore.description)
   const showDescriptionUrl = descriptionUrl && descriptionUrl !== titleUrl
+  const descriptionText = stripHtml(chore.description)
+    .replace(/\s+/g, ' ')
+    .trim()
   const showLeadingSlot = showActions || isMultiSelectMode
   const showTrailingSlot = showActions && !isMultiSelectMode
   const visibleLabels = chore.labelsV2?.slice(0, 2) ?? []
@@ -490,6 +494,19 @@ const CompactChoreCard = ({
             </Chip>
           )}
         </Box>
+
+        {/* Description - single line, truncated with an ellipsis */}
+        {descriptionText && (
+          <Typography
+            level='body-xs'
+            textColor='text.secondary'
+            noWrap
+            title={descriptionText}
+            sx={{ fontSize: 12, lineHeight: 1.4, mb: 0.25 }}
+          >
+            {descriptionText}
+          </Typography>
+        )}
 
         {/* Line 2: Metadata */}
         <Box

@@ -42,6 +42,7 @@ import {
   openExternalUrl,
   splitTextAtFirstHttpUrl,
 } from '../../utils/ExternalLinks.js'
+import { stripHtml } from '../../utils/Helpers.jsx'
 import Priorities from '../../utils/Priorities'
 import ChoreActionMenu, {
   ChoreActionMenuTrigger,
@@ -128,6 +129,9 @@ const ChoreCard = ({
   } = splitTextAtFirstHttpUrl(displayName)
   const descriptionUrl = getFirstHttpUrl(chore.description)
   const showDescriptionUrl = descriptionUrl && descriptionUrl !== titleUrl
+  const descriptionText = stripHtml(chore.description)
+    .replace(/\s+/g, ' ')
+    .trim()
 
   return (
     <Box
@@ -264,7 +268,7 @@ const ChoreCard = ({
                 <Avatar sx={{ mr: 1, fontSize: 22 }}>
                   {Array.from(chore.name)[0]}
                 </Avatar>
-                <Box display='flex' flexDirection='column'>
+                <Box display='flex' flexDirection='column' minWidth={0}>
                   <Typography level='title-md'>
                     {titleBeforeUrl}
                     {titleUrl && (
@@ -295,6 +299,17 @@ const ChoreCard = ({
                     )}
                     {titleAfterUrl}
                   </Typography>
+                  {/* Description - single line, truncated with an ellipsis */}
+                  {descriptionText && (
+                    <Typography
+                      level='body-sm'
+                      textColor='text.secondary'
+                      noWrap
+                      title={descriptionText}
+                    >
+                      {descriptionText}
+                    </Typography>
+                  )}
                   {chore.assignedTo && (
                     <Box display='flex' alignItems='center' gap={0.5}>
                       <Chip
