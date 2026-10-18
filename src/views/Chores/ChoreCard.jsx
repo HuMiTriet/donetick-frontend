@@ -627,10 +627,8 @@ const ChoreCard = ({
                       onAction={(type, chore, extraData) =>
                         onAction(type, chore, extraData)
                       }
-                      onChangeAssignee={() => onAction('changeAssignee', chore)}
                       onChangeDueDate={() => onAction('changeDueDate', chore)}
                       onWriteNFC={() => onAction('writeNFC', chore)}
-                      onNudge={() => onAction('nudge', chore)}
                       onDelete={() => onAction('delete', chore)}
                       sx={ACTION_MENU_SX}
                     />

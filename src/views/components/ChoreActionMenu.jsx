@@ -14,8 +14,6 @@ import {
   NextWeek,
   Nfc,
   NoteAdd,
-  Notifications,
-  RecordVoiceOver,
   SwitchAccessShortcut,
   Today,
   Unarchive,
@@ -26,6 +24,7 @@ import {
 } from '@mui/icons-material'
 import {
   Avatar,
+  Box,
   Button,
   Chip,
   Divider,
@@ -48,7 +47,6 @@ import AppModal from '../../components/common/AppModal'
 import LABEL_COLORS, {
   getTextColorFromBackgroundColor,
 } from '../../utils/Colors'
-import { isOfficialDonetickInstanceSync } from '../../utils/FeatureToggle'
 import Priorities from '../../utils/Priorities'
 import { getIconComponent } from '../../utils/ProjectIcons'
 import { useProjects } from '../Projects/ProjectQueries'
@@ -108,7 +106,6 @@ const ChoreActionMenu = ({
   chore,
   hiddenActions = [],
   onAction,
-  onChangeAssignee,
   onChangeDueDate,
   onChangePriority,
   onClose: controlledOnClose,
@@ -117,7 +114,6 @@ const ChoreActionMenu = ({
   onDelete,
   onMouseEnter,
   onMouseLeave,
-  onNudge,
   onOpen,
   onWriteNFC,
   sx = {},
@@ -128,7 +124,6 @@ const ChoreActionMenu = ({
   const isControlled = controlledAnchorEl !== undefined
   const [uncontrolledAnchorEl, setUncontrolledAnchorEl] = React.useState(null)
   const anchorEl = isControlled ? controlledAnchorEl : uncontrolledAnchorEl
-  const [isOfficialInstance, setIsOfficialInstance] = useState(false)
   const [showProjectPicker, setShowProjectPicker] = useState(false)
   const [showPriorityPicker, setShowPriorityPicker] = useState(false)
   const [showSchedulePicker, setShowSchedulePicker] = useState(false)
@@ -139,15 +134,6 @@ const ChoreActionMenu = ({
   const { data: projects = [] } = useProjects()
   // Phone-only condition (matches AddTaskModal.jsx) — tablets/desktop keep the Menu
   const isSmallScreen = useMediaQuery(theme => theme.breakpoints.down('sm'))
-
-  useEffect(() => {
-    try {
-      setIsOfficialInstance(isOfficialDonetickInstanceSync())
-    } catch (error) {
-      console.warn('Error checking instance type:', error)
-      setIsOfficialInstance(false)
-    }
-  }, [])
 
   useEffect(() => {
     if (isSmallScreen) {
@@ -217,7 +203,11 @@ const ChoreActionMenu = ({
   }
 
   const handleChangePriority = priority => {
-    onChangePriority?.(priority)
+    if (onChangePriority) {
+      onChangePriority(priority)
+    } else {
+      onAction?.('changePriority', chore, { priority: priority.value })
+    }
     handleMenuClose()
   }
 
@@ -419,30 +409,24 @@ const ChoreActionMenu = ({
       submenu: 'schedule',
       endDecorator: <ChevronRight fontSize='small' />,
     },
-    onChangePriority && {
+    {
       key: 'priority',
       icon: <Flag />,
       label: t('priority'),
       onClick: target => openPicker('priority', target),
       submenu: 'priority',
       endDecorator: (
-        <Chip
-          size='sm'
-          variant='soft'
-          color={currentPriority?.color || 'neutral'}
-        >
-          {currentPriority?.name.trim() || t('actionMenu.noPriority')}
-        </Chip>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Chip
+            size='sm'
+            variant='soft'
+            color={currentPriority?.color || 'neutral'}
+          >
+            {currentPriority?.name.trim() || t('actionMenu.noPriority')}
+          </Chip>
+          <ChevronRight fontSize='small' />
+        </Box>
       ),
-    },
-    {
-      key: 'delegate',
-      icon: <RecordVoiceOver />,
-      label: t('modals.delegate'),
-      onClick: () => {
-        onChangeAssignee?.()
-        handleMenuClose()
-      },
     },
     projects.length > 0 && {
       key: 'moveToProject',
@@ -453,15 +437,6 @@ const ChoreActionMenu = ({
       endDecorator: <ChevronRight fontSize='small' />,
     },
     { key: 'divider-utilities', type: 'divider' },
-    isOfficialInstance && {
-      key: 'nudge',
-      icon: <Notifications />,
-      label: t('actionMenu.sendNudge'),
-      onClick: () => {
-        onNudge?.()
-        handleMenuClose()
-      },
-    },
     {
       key: 'history',
       icon: <ManageSearch />,

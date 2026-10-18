@@ -1044,13 +1044,11 @@ const ChoreView = () => {
             chore={chore}
             hiddenActions={['view']}
             onAction={handleMenuAction}
-            onNudge={() => setActiveModal('nudge')}
             onWriteNFC={() => setActiveModal('writeNFC')}
             onCompleteWithNote={() => setNote('')}
             onCompleteWithPastDate={() =>
               setCompletedDate(moment(new Date()).format('YYYY-MM-DDTHH:00:00'))
             }
-            onChangeAssignee={() => setActiveModal('changeAssignee')}
             onChangeDueDate={() => setActiveModal('changeDueDate')}
             onChangePriority={handleUpdatePriority}
             onDelete={confirmDeleteChore}

@@ -155,14 +155,10 @@ const ChoreListView = ({
         onCompleteWithPastDate={() =>
           handleChoreAction('completeWithPastDate', actionMenuChore)
         }
-        onChangeAssignee={() =>
-          handleChoreAction('changeAssignee', actionMenuChore)
-        }
         onChangeDueDate={() =>
           handleChoreAction('changeDueDate', actionMenuChore)
         }
         onWriteNFC={() => handleChoreAction('writeNFC', actionMenuChore)}
-        onNudge={() => handleChoreAction('nudge', actionMenuChore)}
         onDelete={() => handleChoreAction('delete', actionMenuChore)}
       />
     </>

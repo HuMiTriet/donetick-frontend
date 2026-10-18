@@ -652,10 +652,8 @@ const CompactChoreCard = ({
               onCompleteWithPastDate={() =>
                 onAction('completeWithPastDate', chore)
               }
-              onChangeAssignee={() => onAction('changeAssignee', chore)}
               onChangeDueDate={() => onAction('changeDueDate', chore)}
               onWriteNFC={() => onAction('writeNFC', chore)}
-              onNudge={() => onAction('nudge', chore)}
               onDelete={() => onAction('delete', chore)}
               sx={ACTION_MENU_SX}
             />
