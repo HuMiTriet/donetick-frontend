@@ -43,7 +43,9 @@ export const celebrate = async () => {
     const fresh = lastPointer && Date.now() - lastPointer.at < POINTER_FRESH_MS
     const x = fresh ? lastPointer.x : window.innerWidth / 2
     const y = fresh ? lastPointer.y : window.innerHeight / 2
-    party.confetti(new party.Circle(window.scrollX + x, window.scrollY + y))
+    party.confetti(new party.Circle(window.scrollX + x, window.scrollY + y), {
+      count: party.variation.range(80, 100),
+    })
   } catch {
     // confetti is decoration; never let it break a completion
   }
