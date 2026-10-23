@@ -11,6 +11,7 @@ import {
   Webhook,
 } from '@mui/icons-material'
 import { Box, Checkbox, Chip, IconButton, Typography } from '@mui/joy'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useImpersonateUser } from '../../contexts/ImpersonateUserContext.jsx'
@@ -34,10 +35,12 @@ import {
   splitTextAtFirstHttpUrl,
 } from '../../utils/ExternalLinks.js'
 import { stripHtml } from '../../utils/Helpers.jsx'
+import { removeEmptySubTasks } from '../../utils/SubTasks'
 import ChoreActionMenu, {
   ChoreActionMenuTrigger,
 } from '../components/ChoreActionMenu'
 import PendingBadge from '../components/PendingBadge'
+import { CardSubTaskList, SubTaskCountChip } from './components/CardSubTasks'
 
 // Hoisted so emotion isn't re-serializing an identical object for every row
 const ACTION_MENU_SX = {
@@ -81,6 +84,15 @@ const CompactChoreCard = ({
   const { data: pendingCmds } = usePendingCommands(chore.id)
 
   const { impersonatedUser } = useImpersonateUser()
+
+  const subTasks = useMemo(
+    () => removeEmptySubTasks(chore.subTasks) ?? [],
+    [chore.subTasks],
+  )
+  const [showSubTasks, setShowSubTasks] = useState(false)
+  // A chore still waiting to be created has no server id to save subtasks to
+  const canExpandSubTasks =
+    !isMultiSelectMode && !viewOnly && !chore._pendingCreate
 
   // Check if the current user can approve/reject (admin, manager, or task owner)
   const canApproveReject = () => {
@@ -164,6 +176,7 @@ const CompactChoreCard = ({
       sx={{
         ...sx,
         display: 'flex',
+        flexWrap: 'wrap',
         alignItems: 'center',
         minHeight: 56,
         minWidth: '100%',
@@ -534,6 +547,18 @@ const CompactChoreCard = ({
             {formatMetadata()}
           </Typography>
 
+          <SubTaskCountChip
+            size='sm'
+            subTasks={subTasks}
+            expanded={canExpandSubTasks && showSubTasks}
+            onToggle={
+              canExpandSubTasks
+                ? () => setShowSubTasks(open => !open)
+                : undefined
+            }
+            sx={{ ml: 0.5 }}
+          />
+
           {showDescriptionUrl && (
             <Chip
               variant='soft'
@@ -659,6 +684,26 @@ const CompactChoreCard = ({
             />
           ))}
       </Box>
+
+      {/* Subtasks wrap onto their own line, so the row above (and its
+          complete button) keeps its height and position when expanded */}
+      {canExpandSubTasks && showSubTasks && subTasks.length > 0 && (
+        <Box
+          sx={{
+            flexBasis: '100%',
+            // Line up with the title: complete button width plus its margin
+            pl: showLeadingSlot ? '52px' : 0,
+            pr: 1.5,
+          }}
+        >
+          <CardSubTaskList
+            choreId={chore.id}
+            performers={performers}
+            subTasks={subTasks}
+            sx={{ mt: 0.5 }}
+          />
+        </Box>
+      )}
     </Box>
   )
 }

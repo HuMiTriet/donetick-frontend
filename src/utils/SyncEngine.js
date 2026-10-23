@@ -24,6 +24,12 @@ import { isOfflineFeatureEnabled } from './OfflineFeatureToggle'
 // stay visible via commandQueue.getFailed().
 const MAX_COMMAND_RETRIES = 8
 
+// Bump when synced chores start carrying a field older caches lack, so the
+// next sync refetches every chore instead of only the changed ones.
+// 2: chores include subTasks.
+const CHORE_CACHE_SCHEMA = 2
+const CHORE_CACHE_SCHEMA_KEY = 'chore_cache_schema'
+
 class SyncEngine {
   constructor() {
     this.isSyncing = false
@@ -260,7 +266,11 @@ class SyncEngine {
   }
 
   async _deltaSync() {
-    const cursor = (await offlineDB.getSyncCursor()) || -1
+    // A cache written before chores carried a field (e.g. subTasks) only
+    // picks it up as each chore next changes, so resync everything once
+    const cacheUpToDate =
+      (await offlineDB.getKV(CHORE_CACHE_SCHEMA_KEY)) === CHORE_CACHE_SCHEMA
+    const cursor = cacheUpToDate ? (await offlineDB.getSyncCursor()) || -1 : -1
 
     let hasMore = true
     let currentCursor = cursor
@@ -341,6 +351,10 @@ class SyncEngine {
 
     await offlineDB.setSyncCursor(currentCursor)
     await offlineDB.setLastSyncTime(Date.now())
+    // Only a fully drained resync brings every cached chore up to date
+    if (!cacheUpToDate && !hasMore) {
+      await offlineDB.saveKV(CHORE_CACHE_SCHEMA_KEY, CHORE_CACHE_SCHEMA)
+    }
   }
 
   // Cache current chores (call after a successful online fetch).

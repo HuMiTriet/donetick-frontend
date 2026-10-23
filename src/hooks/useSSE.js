@@ -242,6 +242,9 @@ export const useSSE = () => {
                 return { res: newChoreData }
               },
             )
+            // Chore cards show subtask progress from the list; the server
+            // bumped the chore's sync version, so a resync picks it up
+            queryClient.invalidateQueries({ queryKey: ['chores'] })
             break
 
           case 'heartbeat':

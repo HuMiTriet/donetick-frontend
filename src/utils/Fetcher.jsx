@@ -94,9 +94,10 @@ const GetAllUsers = () => {
   })
 }
 const GetChoresNew = async includeArchived => {
-  var url = `/chores/`
+  // Cards show subtask progress, so the list carries each chore's subtasks
+  var url = `/chores/?includeSubtasks=true`
   if (includeArchived) {
-    url += `?includeArchived=true`
+    url += `&includeArchived=true`
   }
 
   const resp = await Fetch(url, {

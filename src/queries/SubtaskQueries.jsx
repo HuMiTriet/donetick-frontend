@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useCallback } from 'react'
 
 import { networkManager } from '../hooks/NetworkManager'
 import { CompleteSubTask, SaveChore } from '../utils/Fetcher'
@@ -23,6 +24,35 @@ export const useUpdate = () => {
       queryClient.invalidateQueries({ queryKey: ['chores'] })
     },
   })
+}
+
+// Chore lists render straight from the ['chores', ...] caches, so a card that
+// checks off a subtask patches them in place for instant feedback, then
+// refetches once the server has settled so the list matches it again.
+export const useCachedSubTasks = () => {
+  const queryClient = useQueryClient()
+
+  const setCachedSubTasks = useCallback(
+    (choreId, subTasks) => {
+      queryClient.setQueriesData({ queryKey: ['chores'] }, oldData => {
+        if (!oldData?.res) return oldData
+        return {
+          ...oldData,
+          res: oldData.res.map(chore =>
+            chore.id === choreId ? { ...chore, subTasks } : chore,
+          ),
+        }
+      })
+    },
+    [queryClient],
+  )
+
+  const refreshChores = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: ['chores'] }),
+    [queryClient],
+  )
+
+  return { refreshChores, setCachedSubTasks }
 }
 
 export const useCompleteSubTask = () => {

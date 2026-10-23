@@ -428,6 +428,8 @@ function SortableItem({
 const SubTasks = ({
   choreId = 0,
   editMode = true,
+  // Called once a completion toggle's requests have settled
+  onToggleSettled,
   performers,
   setTasks,
   shouldFocus = false,
@@ -480,15 +482,17 @@ const SubTasks = ({
       ? null
       : new Date().toISOString()
 
+    const completedBy = impersonatedUser?.userId || userProfile?.id
     const updatedTasks = tasks.map(task =>
       task.id === taskId
         ? {
             ...task,
             completedAt: newCompletedAt,
-            completedBy: impersonatedUser?.userId || userProfile?.id,
+            completedBy,
           }
         : task,
     )
+    const changedIds = [taskId]
 
     if (newCompletedAt) {
       const completeChildren = parentId => {
@@ -496,9 +500,14 @@ const SubTasks = ({
         children.forEach(child => {
           const index = updatedTasks.findIndex(t => t.id === child.id)
           if (index !== -1) {
-            updatedTasks[index] = {
-              ...updatedTasks[index],
-              completedAt: newCompletedAt,
+            // Children already done keep their own completion
+            if (!updatedTasks[index].completedAt) {
+              updatedTasks[index] = {
+                ...updatedTasks[index],
+                completedAt: newCompletedAt,
+                completedBy,
+              }
+              changedIds.push(child.id)
             }
             completeChildren(child.id)
           }
@@ -507,9 +516,18 @@ const SubTasks = ({
       completeChildren(taskId)
     }
 
-    CompleteSubTask(taskId, Number(choreId), newCompletedAt).then(res => {
-      if (res.status !== 200) console.log('Error updating task')
-    })
+    // Save every row that changed, not only the clicked one, or completed
+    // children come back unchecked the next time the chore is loaded
+    Promise.all(
+      changedIds.map(id =>
+        CompleteSubTask(id, Number(choreId), newCompletedAt),
+      ),
+    )
+      .then(responses => {
+        if (responses.some(res => !res?.ok)) console.log('Error updating task')
+      })
+      .catch(() => console.log('Error updating task'))
+      .finally(() => onToggleSettled?.())
 
     setTasks(updatedTasks)
   }
