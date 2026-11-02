@@ -41,9 +41,82 @@ const VALID_MONTHS = {
   dec: 'December',
 }
 
-const ALL_MONTHS = Object.values(VALID_MONTHS).filter(
-  (v, i, a) => a.indexOf(v) === i,
-)
+const FREQUENCY_PATTERNS = [
+  {
+    frequencyType: 'day_of_the_month:every',
+    regex: /(\d+)(?:th|st|nd|rd)? of every month/i,
+    name: 'Every {day} of every month',
+  },
+  {
+    frequencyType: 'days_of_the_week:nth_occurrence',
+    regex:
+      /(first|second|third|fourth|last|\d+(?:st|nd|rd|th)?) (monday|tuesday|wednesday|thursday|friday|saturday|sunday) of (?:the )?month/i,
+    name: '{occurrence} {day} of the month',
+  },
+  {
+    frequencyType: 'days_of_the_week:nth_occurrence_multiple',
+    regex:
+      /((?:first|second|third|fourth|last|\d+(?:st|nd|rd|th)?)(?:,? (?:and |& )?))+\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)s? of (?:the )?month/i,
+    name: '{occurrences} {day} of the month',
+  },
+  {
+    frequencyType: 'daily',
+    regex: /(every day|daily|everyday)/i,
+    name: 'Every day',
+  },
+  {
+    frequencyType: 'daily:time',
+    regex: /every (morning|noon|afternoon|evening|night)/i,
+    name: 'Every {time} daily',
+  },
+  {
+    frequencyType: 'weekly',
+    regex: /(every week|weekly)/i,
+    name: 'Every week',
+  },
+  {
+    frequencyType: 'monthly',
+    regex: /(every month|monthly)/i,
+    name: 'Every month',
+  },
+  {
+    frequencyType: 'yearly',
+    regex: /every year/i,
+    name: 'Every year',
+  },
+  {
+    frequencyType: 'monthly',
+    regex: /every (?:other )?month/i,
+    name: 'Bi Monthly',
+    value: 2,
+  },
+  {
+    frequencyType: 'interval:2week',
+    regex: /(bi-?weekly|every other week)/i,
+    value: 2,
+    name: 'Bi Weekly',
+  },
+  {
+    frequencyType: 'interval',
+    regex: /every (\d+) (days?|weeks?|months?|years?)/i,
+    name: 'Every {frequency} {unit}',
+  },
+  {
+    frequencyType: 'interval:every_other',
+    regex: /every other (days?|weeks?|months?|years?)/i,
+    name: 'Every other {unit}',
+  },
+  {
+    frequencyType: 'days_of_the_week',
+    regex: /every ([\w, ]+(?:day)?(?:, [\w, ]+(?:day)?)*)/i,
+    name: 'Every {days}',
+  },
+  {
+    frequencyType: 'day_of_the_month',
+    regex: /(\d+)(?:st|nd|rd|th)? of ([\w ]+(?:(?:,| and |\s)[\w ]+)*)/i,
+    name: 'Every {day} days of {months}',
+  },
+]
 
 // Helper function to validate word boundaries for date/time matches
 // Prevents matching partial words like 'wed' in 'wedding', 'fri' in 'friend', etc.
@@ -96,6 +169,11 @@ export const parsePriority = inputSentence => {
     cleanedSentence: inputSentence,
   }
 }
+
+export const parseTrigger = (inputSentence, trigger, items) => {
+  lcSentence = inputSentence.toLowerCase()
+}
+
 export const parseLabels = (inputSentence, userLabels) => {
   const currentLabels = []
   const matchedRanges = []
@@ -165,9 +243,8 @@ export const parseLabels = (inputSentence, userLabels) => {
   }
 }
 
-export const parseRepeatV2 = inputSentence => {
+export const parseFrequency = inputSentence => {
   const sentence = inputSentence.toLowerCase()
-  const lowerInputSentence = inputSentence.toLowerCase()
   const result = {
     frequency: 1,
     frequencyType: null,
@@ -178,85 +255,7 @@ export const parseRepeatV2 = inputSentence => {
       time: new Date().toISOString(),
     },
   }
-
-  const patterns = [
-    {
-      frequencyType: 'day_of_the_month:every',
-      regex: /(\d+)(?:th|st|nd|rd)? of every month/i,
-      name: 'Every {day} of every month',
-    },
-    {
-      frequencyType: 'days_of_the_week:nth_occurrence',
-      regex:
-        /(first|second|third|fourth|last|\d+(?:st|nd|rd|th)?) (monday|tuesday|wednesday|thursday|friday|saturday|sunday) of (?:the )?month/i,
-      name: '{occurrence} {day} of the month',
-    },
-    {
-      frequencyType: 'days_of_the_week:nth_occurrence_multiple',
-      regex:
-        /((?:first|second|third|fourth|last|\d+(?:st|nd|rd|th)?)(?:,? (?:and |& )?))+\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)s? of (?:the )?month/i,
-      name: '{occurrences} {day} of the month',
-    },
-    {
-      frequencyType: 'daily',
-      regex: /(every day|daily|everyday)/i,
-      name: 'Every day',
-    },
-    {
-      frequencyType: 'daily:time',
-      regex: /every (morning|noon|afternoon|evening|night)/i,
-      name: 'Every {time} daily',
-    },
-    {
-      frequencyType: 'weekly',
-      regex: /(every week|weekly)/i,
-      name: 'Every week',
-    },
-    {
-      frequencyType: 'monthly',
-      regex: /(every month|monthly)/i,
-      name: 'Every month',
-    },
-    {
-      frequencyType: 'yearly',
-      regex: /every year/i,
-      name: 'Every year',
-    },
-    {
-      frequencyType: 'monthly',
-      regex: /every (?:other )?month/i,
-      name: 'Bi Monthly',
-      value: 2,
-    },
-    {
-      frequencyType: 'interval:2week',
-      regex: /(bi-?weekly|every other week)/i,
-      value: 2,
-      name: 'Bi Weekly',
-    },
-    {
-      frequencyType: 'interval',
-      regex: /every (\d+) (days?|weeks?|months?|years?)/i,
-      name: 'Every {frequency} {unit}',
-    },
-    {
-      frequencyType: 'interval:every_other',
-      regex: /every other (days?|weeks?|months?|years?)/i,
-      name: 'Every other {unit}',
-    },
-    {
-      frequencyType: 'days_of_the_week',
-      regex: /every ([\w, ]+(?:day)?(?:, [\w, ]+(?:day)?)*)/i,
-      name: 'Every {days}',
-    },
-    {
-      frequencyType: 'day_of_the_month',
-      regex: /(\d+)(?:st|nd|rd|th)? of ([\w ]+(?:(?:,| and |\s)[\w ]+)*)/i,
-      name: 'Every {day} days of {months}',
-    },
-  ]
-
-  for (const pattern of patterns) {
+  for (const pattern of FREQUENCY_PATTERNS) {
     const match = sentence.match(pattern.regex)
     if (!match) continue
 
@@ -282,8 +281,8 @@ export const parseRepeatV2 = inputSentence => {
           highlight: [
             {
               text: pattern.name,
-              start: lowerInputSentence.indexOf(match[0]),
-              end: lowerInputSentence.indexOf(match[0]) + match[0].length,
+              start: sentence.indexOf(match[0]),
+              end: sentence.indexOf(match[0]) + match[0].length,
             },
           ],
           cleanedSentence: inputSentence.replace(match[0], '').trim(),
@@ -300,8 +299,8 @@ export const parseRepeatV2 = inputSentence => {
           highlight: [
             {
               text: pattern.name,
-              start: lowerInputSentence.indexOf(match[0]),
-              end: lowerInputSentence.indexOf(match[0]) + match[0].length,
+              start: sentence.indexOf(match[0]),
+              end: sentence.indexOf(match[0]) + match[0].length,
             },
           ],
           cleanedSentence: inputSentence.replace(match[0], '').trim(),
@@ -340,8 +339,8 @@ export const parseRepeatV2 = inputSentence => {
           highlight: [
             {
               text: pattern.name,
-              start: lowerInputSentence.indexOf(match[0]),
-              end: lowerInputSentence.indexOf(match[0]) + match[0].length,
+              start: sentence.indexOf(match[0]),
+              end: sentence.indexOf(match[0]) + match[0].length,
             },
           ],
           cleanedSentence: inputSentence.replace(match[0], '').trim(),
@@ -377,8 +376,8 @@ export const parseRepeatV2 = inputSentence => {
           highlight: [
             {
               text: pattern.name,
-              start: lowerInputSentence.indexOf(match[0]),
-              end: lowerInputSentence.indexOf(match[0]) + match[0].length,
+              start: sentence.indexOf(match[0]),
+              end: sentence.indexOf(match[0]) + match[0].length,
             },
           ],
           cleanedSentence: inputSentence.replace(match[0], '').trim(),
@@ -393,8 +392,8 @@ export const parseRepeatV2 = inputSentence => {
           highlight: [
             {
               text: pattern.name,
-              start: lowerInputSentence.indexOf(match[0]),
-              end: lowerInputSentence.indexOf(match[0]) + match[0].length,
+              start: sentence.indexOf(match[0]),
+              end: sentence.indexOf(match[0]) + match[0].length,
             },
           ],
           cleanedSentence: inputSentence.replace(match[0], '').trim(),
@@ -410,8 +409,8 @@ export const parseRepeatV2 = inputSentence => {
           highlight: [
             {
               text: pattern.name,
-              start: lowerInputSentence.indexOf(match[0]),
-              end: lowerInputSentence.indexOf(match[0]) + match[0].length,
+              start: sentence.indexOf(match[0]),
+              end: sentence.indexOf(match[0]) + match[0].length,
             },
           ],
           cleanedSentence: inputSentence.replace(match[0], '').trim(),
@@ -452,8 +451,8 @@ export const parseRepeatV2 = inputSentence => {
           highlight: [
             {
               text: pattern.name,
-              start: lowerInputSentence.indexOf(match[0]),
-              end: lowerInputSentence.indexOf(match[0]) + match[0].length,
+              start: sentence.indexOf(match[0]),
+              end: sentence.indexOf(match[0]) + match[0].length,
             },
           ],
           cleanedSentence: inputSentence.replace(match[0], '').trim(),
@@ -468,8 +467,8 @@ export const parseRepeatV2 = inputSentence => {
           highlight: [
             {
               text: pattern.name,
-              start: lowerInputSentence.indexOf(match[0]),
-              end: lowerInputSentence.indexOf(match[0]) + match[0].length,
+              start: sentence.indexOf(match[0]),
+              end: sentence.indexOf(match[0]) + match[0].length,
             },
           ],
           cleanedSentence: inputSentence.replace(match[0], '').trim(),
@@ -602,10 +601,10 @@ export const parseAssignees = (inputSentence, users) => {
 
   // Check for @Anyone first (special case)
   const anyoneRegex = /@anyone(?=\s|$)/i
-  const anyoneMatch = inputSentence.match(anyoneRegex)
+  const anyoneMatch = sentence.match(anyoneRegex)
 
   if (anyoneMatch) {
-    const index = inputSentence.search(anyoneRegex)
+    const index = sentence.search(anyoneRegex)
     highlight.push({
       text: anyoneMatch[0],
       start: index,
@@ -614,7 +613,7 @@ export const parseAssignees = (inputSentence, users) => {
     matchedTexts.push({ pattern: '@anyone', original: anyoneMatch[0] })
 
     // For @Anyone, return empty result (no specific assignees)
-    let cleanedSentence = inputSentence
+    let cleanedSentence = sentence
     for (const matchedText of matchedTexts) {
       cleanedSentence = cleanedSentence.replace(
         new RegExp(
@@ -648,11 +647,11 @@ export const parseAssignees = (inputSentence, users) => {
       `@${user.displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=\\s|$)`,
       'i',
     )
-    const exactMatch = inputSentence.match(exactMatchRegex)
+    const exactMatch = sentence.match(exactMatchRegex)
 
     if (exactMatch && !result.some(r => r.userId === user.userId)) {
       result.push(user)
-      const index = inputSentence.search(exactMatchRegex)
+      const index = sentence.search(exactMatchRegex)
 
       highlight.push({
         text: exactMatch[0],
@@ -667,7 +666,7 @@ export const parseAssignees = (inputSentence, users) => {
   }
 
   if (result.length > 0) {
-    let cleanedSentence = inputSentence
+    let cleanedSentence = sentence
     // Remove all matched assignee patterns using the original matched text
     for (const matchedText of matchedTexts) {
       cleanedSentence = cleanedSentence.replace(
@@ -687,7 +686,7 @@ export const parseAssignees = (inputSentence, users) => {
     }
   }
 
-  return { result: null, isAnyone: false, cleanedSentence: inputSentence }
+  return { result: null, isAnyone: false, cleanedSentence: sentence }
 }
 
 export const parsePoints = inputSentence => {
