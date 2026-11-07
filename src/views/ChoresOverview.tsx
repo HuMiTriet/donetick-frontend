@@ -1,13 +1,9 @@
 import {
-  Adjust,
   CancelRounded,
   CheckBox,
   Edit,
-  HelpOutline,
   History,
-  QueryBuilder,
   SearchRounded,
-  Warning,
 } from '@mui/icons-material'
 import {
   Avatar,
@@ -27,6 +23,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 
+import type { ApiResponse, Chore, User } from '../types/models'
 import { celebrate } from '../utils/Celebrate'
 import { GetAllUsers, GetChores, MarkChoreComplete } from '../utils/Fetcher'
 import DateModal from './Modals/Inputs/DateModal'
@@ -38,26 +35,26 @@ const CHORE_STATUS = {
   DUE_SOON: 'Soon',
   DUE_NOW: 'Due',
   OVER_DUE: 'Overdue',
-}
+} as const
 
 const ChoresOverview = () => {
   const { t } = useTranslation('chores')
-  const [chores, setChores] = useState([])
-  const [filteredChores, setFilteredChores] = useState([])
-  const [performers, setPerformers] = useState([])
-  const [activeUserId, setActiveUserId] = useState(null)
+  const [chores, setChores] = useState<Chore[]>([])
+  const [filteredChores, setFilteredChores] = useState<Chore[]>([])
+  const [performers, setPerformers] = useState<User[]>([])
+  const [activeUserId, setActiveUserId] = useState<number | null>(null)
   const [isDateModalOpen, setIsDateModalOpen] = useState(false)
-  const [choreId, setChoreId] = useState(null)
+  const [choreId, setChoreId] = useState<number | null>(null)
   const [search, setSearch] = useState('')
   const Navigate = useNavigate()
 
-  const getChoreStatus = chore => {
+  const getChoreStatus = (chore: Chore) => {
     if (chore.nextDueDate === null) {
       return CHORE_STATUS.NO_DUE_DATE
     }
     const dueDate = new Date(chore.nextDueDate)
     const now = new Date()
-    const diff = dueDate - now
+    const diff = dueDate.getTime() - now.getTime()
     if (diff < 0) {
       return CHORE_STATUS.OVER_DUE
     }
@@ -69,7 +66,7 @@ const ChoresOverview = () => {
     }
     return CHORE_STATUS.NO_DUE_DATE
   }
-  const getChoreStatusColor = chore => {
+  const getChoreStatusColor = (chore: Chore) => {
     switch (getChoreStatus(chore)) {
       case CHORE_STATUS.NO_DUE_DATE:
         return 'neutral'
@@ -83,37 +80,22 @@ const ChoresOverview = () => {
         return 'neutral'
     }
   }
-  const getChoreStatusIcon = chore => {
-    switch (getChoreStatus(chore)) {
-      case CHORE_STATUS.NO_DUE_DATE:
-        return <HelpOutline />
-      case CHORE_STATUS.DUE_SOON:
-        return <QueryBuilder />
-      case CHORE_STATUS.DUE_NOW:
-        return <Adjust />
-      case CHORE_STATUS.OVER_DUE:
-        return <Warning />
-      default:
-        return <HelpOutline />
-    }
-  }
   useEffect(() => {
     // fetch chores:
     GetChores()
       .then(response => response.json())
-      .then(data => {
-        const filteredData = data.res.filter(
-          chore => chore.assignedTo === activeUserId || chore.assignedTo === 0,
-        )
+      .then((data: ApiResponse<Chore[]>) => {
         setChores(data.res)
         setFilteredChores(data.res)
       })
     GetAllUsers()
       .then(response => response.json())
-      .then(data => {
+      .then((data: ApiResponse<User[]>) => {
         setPerformers(data.res)
       })
-    const user = JSON.parse(localStorage.getItem('user'))
+    const user: Pick<User, 'id'> | null = JSON.parse(
+      localStorage.getItem('user') ?? 'null',
+    )
     if (user != null && user.id > 0) {
       setActiveUserId(user.id)
     }
@@ -127,7 +109,6 @@ const ChoresOverview = () => {
       {/* <SummaryCard /> */}
       <Grid container>
         <Grid
-          item
           sm={6}
           alignSelf={'flex-start'}
           minWidth={100}
@@ -150,7 +131,7 @@ const ChoresOverview = () => {
             endDecorator={
               search !== '' ? (
                 <Button
-                  variant='text'
+                  variant='plain'
                   onClick={() => {
                     setSearch('')
                     setFilteredChores(chores)
@@ -159,14 +140,14 @@ const ChoresOverview = () => {
                   <CancelRounded />
                 </Button>
               ) : (
-                <Button variant='text'>
+                <Button variant='plain'>
                   <SearchRounded />
                 </Button>
               )
             }
           ></Input>
         </Grid>
-        <Grid item sm={6} justifyContent={'flex-end'} display={'flex'} gap={2}>
+        <Grid sm={6} justifyContent={'flex-end'} display={'flex'} gap={2}>
           <Button
             onClick={() => {
               Navigate(`/chores/create`)
@@ -205,7 +186,7 @@ const ChoresOverview = () => {
                 {chore.name || '--'}
               </td>
               <td>
-                {chore.assignedTo > 0 ? (
+                {(chore.assignedTo ?? 0) > 0 ? (
                   <Tooltip
                     title={
                       performers.find(p => p.id === chore.assignedTo)
@@ -223,7 +204,10 @@ const ChoresOverview = () => {
                         </Avatar>
                       }
                     >
-                      {performers.find(p => p.id === chore.assignedTo)?.name}
+                      {
+                        performers.find(p => p.id === chore.assignedTo)
+                          ?.displayName
+                      }
                     </Chip>
                   </Tooltip>
                 ) : (
@@ -268,7 +252,7 @@ const ChoresOverview = () => {
                         response => {
                           if (response.ok) {
                             celebrate()
-                            response.json().then(data => {
+                            response.json().then((data: ApiResponse<Chore>) => {
                               const newChore = data.res
                               const newChores = [...chores]
                               const index = newChores.findIndex(
@@ -317,13 +301,14 @@ const ChoresOverview = () => {
         </tbody>
       </Table>
       <DateModal
+        current={null}
         isOpen={isDateModalOpen}
         key={choreId}
         title={t('overview.changeDueDate')}
         onClose={() => {
           setIsDateModalOpen(false)
         }}
-        onSave={date => {
+        onSave={(date: string) => {
           if (activeUserId === null) {
             alert('Please select a performer')
             return
@@ -332,7 +317,7 @@ const ChoresOverview = () => {
             response => {
               if (response.ok) {
                 celebrate()
-                response.json().then(data => {
+                response.json().then((data: ApiResponse<Chore>) => {
                   const newChore = data.res
                   const newChores = [...chores]
                   const index = newChores.findIndex(c => c.id === choreId)
@@ -350,4 +335,3 @@ const ChoresOverview = () => {
 }
 
 export default ChoresOverview
-

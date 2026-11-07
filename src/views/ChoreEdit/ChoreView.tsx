@@ -33,9 +33,9 @@ import {
   Sheet,
   Typography,
 } from '@mui/joy'
-import { useQueryClient } from '@tanstack/react-query'
+import { type UseMutationResult, useQueryClient } from '@tanstack/react-query'
 import moment from 'moment'
-import { useEffect, useState } from 'react'
+import { type ComponentType, type ReactNode, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
@@ -57,6 +57,14 @@ import {
 } from '../../queries/TimeQueries'
 import { useCircleMembers, useUserProfile } from '../../queries/UserQueries.jsx'
 import { useNotification } from '../../service/NotificationProvider'
+import type {
+  ApiResponse,
+  Chore,
+  ChoreDetail,
+  ChoreHistory,
+  CircleMember,
+  SubTask,
+} from '../../types/models'
 import { celebrate } from '../../utils/Celebrate'
 import {
   ChoreHistoryStatus,
@@ -91,7 +99,7 @@ import DueDatePickerModal, {
 } from '../components/DueDatePickerModal'
 import LoadingComponent from '../components/Loading.jsx'
 import PendingBadge from '../components/PendingBadge'
-import RichTextEditor from '../components/RichTextEditor.jsx'
+import UntypedRichTextEditor from '../components/RichTextEditor.jsx'
 import SubTasks from '../components/SubTask.jsx'
 import AssigneeModal from '../Modals/Inputs/AssigneeModal'
 import AttachmentBrowserModal from '../Modals/Inputs/AttachmentBrowserModal'
@@ -102,23 +110,109 @@ import WriteNFCModal from '../Modals/Inputs/WriteNFCModal'
 import TimePassedCard from './TimePassedCard.jsx'
 import TimerSplitButton from './TimerSplitButton.jsx'
 
-const isNetworkError = err =>
+type ChoreViewData = Partial<Omit<ChoreDetail & Chore, 'status'>> & {
+  status?: ChoreDetail['status'] | undefined
+}
+
+type InfoCard = {
+  size: number
+  icon: ReactNode
+  title: string
+  text?: string
+  subtext?: string
+  subtext2?: string | null
+}
+
+type ConfirmConfig = {
+  isOpen?: boolean
+  title?: string
+  message?: string
+  confirmText?: string
+  cancelText?: string
+  onClose?: (confirmed: boolean) => void
+}
+
+type NoteViewerConfig = {
+  isOpen: boolean
+  title?: string
+  content?: string | null | undefined
+  onClose?: () => void
+}
+
+type ActiveModal =
+  'changeAssignee' | 'changeDueDate' | 'nudge' | 'writeNFC' | null
+
+type PriorityOption = {
+  value: number
+}
+
+type ProjectOption = {
+  id: number | null
+  name: string
+}
+
+type MenuActionExtraData = {
+  date?: Date | null
+  project?: ProjectOption
+}
+
+type NudgePayload = {
+  message: string
+  notifyAllAssignees: boolean
+}
+
+type TimeSessionVariables = {
+  choreId: string | undefined
+  sessionId: number
+}
+
+type TimerMutation<TVariables> = UseMutationResult<
+  Partial<ApiResponse<ChoreViewData>>,
+  Error,
+  TVariables
+>
+
+type RichTextEditorProps = {
+  draftId?: string
+  entityId?: number | undefined
+  entityType?: string
+  isEditable?: boolean
+  onChange?: (html: string) => void
+  placeholder?: string | null
+  value?: string
+  variant?: string
+}
+
+const RichTextEditor =
+  UntypedRichTextEditor as ComponentType<RichTextEditorProps>
+
+const TIMER_STATUSES: readonly (number | undefined)[] = [
+  ChoreStatus.ACTIVE,
+  ChoreStatus.PAUSED,
+]
+
+const isNetworkError = (err: unknown) =>
   err instanceof TypeError && err.message === 'Failed to fetch'
 
-const decodeHtmlEntities = value => {
+const getErrorMessage = (error: unknown) =>
+  typeof error === 'object' && error !== null && 'message' in error
+    ? error.message
+    : undefined
+
+const decodeHtmlEntities = (value: unknown) => {
   if (typeof value !== 'string') return ''
 
   return value
-    .replaceAll('&lt;', '<')
-    .replaceAll('&gt;', '>')
-    .replaceAll('&quot;', '"')
-    .replaceAll('&#39;', "'")
-    .replaceAll('&amp;', '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
 }
 
-const hasHtmlTags = value => /<\/?[a-z][\s\S]*>/i.test(value)
+const hasHtmlTags = (value: string) => /<\/?[a-z][\s\S]*>/i.test(value)
 
-const getNFCUrl = choreId =>
+const getNFCUrl = (choreId: string | undefined) =>
   Capacitor.getPlatform() === 'android' || Capacitor.getPlatform() === 'ios'
     ? `donetick://chores/${choreId}`
     : `${window.location.origin}/chores/${choreId}`
@@ -126,24 +220,28 @@ const getNFCUrl = choreId =>
 const ChoreView = () => {
   const { t } = useTranslation('chores')
   const { fmt } = useLocalization()
-  const [chore, setChore] = useState({})
+  const [chore, setChore] = useState<ChoreViewData>({})
   const navigate = useNavigate()
-  const [performers, setPerformers] = useState([])
-  const [infoCards, setInfoCards] = useState([])
+  const [performers, setPerformers] = useState<CircleMember[]>([])
+  const [infoCards, setInfoCards] = useState<InfoCard[]>([])
   const { choreId } = useParams()
-  const [note, setNote] = useState(null)
+  const [note, setNote] = useState<string | null>(null)
   const queryClient = useQueryClient()
   const { showError, showSuccess, showUndo } = useNotification()
 
   const [searchParams] = useSearchParams()
 
-  const [completedDate, setCompletedDate] = useState(null)
-  const [confirmModelConfig, setConfirmModelConfig] = useState({
+  const [completedDate, setCompletedDate] = useState<string | null>(null)
+  const [confirmModelConfig, setConfirmModelConfig] = useState<ConfirmConfig>({
     isOpen: false,
   })
-  const [activeModal, setActiveModal] = useState(null)
-  const [noteViewerConfig, setNoteViewerConfig] = useState({ isOpen: false })
-  const [timerActionConfig, setTimerActionConfig] = useState({ isOpen: false })
+  const [activeModal, setActiveModal] = useState<ActiveModal>(null)
+  const [noteViewerConfig, setNoteViewerConfig] = useState<NoteViewerConfig>({
+    isOpen: false,
+  })
+  const [timerActionConfig, setTimerActionConfig] = useState<ConfirmConfig>({
+    isOpen: false,
+  })
   const [attachmentBrowserOpen, setAttachmentBrowserOpen] = useState(false)
   const { data: circleMembersData, isLoading: isCircleMembersLoading } =
     useCircleMembers()
@@ -165,7 +263,8 @@ const ChoreView = () => {
 
   const { data: pendingCmds } = usePendingCommands(choreId)
 
-  const choreHistory = choreHistoryData?.res || []
+  const choreHistory =
+    (choreHistoryData as ApiResponse<ChoreHistory[]> | undefined)?.res || []
   const historyCompletionCount = choreHistory.filter(historyEntry => {
     const status = Number(historyEntry?.status)
     return status === ChoreHistoryStatus.COMPLETED
@@ -174,10 +273,13 @@ const ChoreView = () => {
     ? historyCompletionCount
     : chore.totalCompletedCount || 0
 
-  const startChore = useStartChore()
-  const pauseChore = usePauseChore()
-  const deleteTimeSession = useDeleteTimeSession()
-  const resetChoreTimer = useResetChoreTimer()
+  const startChore = useStartChore() as TimerMutation<string | undefined>
+  const pauseChore = usePauseChore() as TimerMutation<string | undefined>
+  const deleteTimeSession =
+    useDeleteTimeSession() as unknown as TimerMutation<TimeSessionVariables>
+  const resetChoreTimer = useResetChoreTimer() as TimerMutation<
+    string | undefined
+  >
   const { data: choreTimer } = useChoreTimer(choreId)
 
   useEffect(() => {
@@ -196,7 +298,7 @@ const ChoreView = () => {
 
   useEffect(() => {
     if (chore && performers?.length > 0) {
-      const cards = [
+      const cards: InfoCard[] = [
         {
           size: 6,
           icon: <PeopleAlt />,
@@ -228,7 +330,9 @@ const ChoreView = () => {
           }`,
 
           subtext2:
-            chore.deadlineOffset > 0 && chore.nextDueDate
+            chore.deadlineOffset &&
+            chore.deadlineOffset > 0 &&
+            chore.nextDueDate
               ? t('choreView.deadline', {
                   date: moment(chore.nextDueDate)
                     .add(chore.deadlineOffset, 'seconds')
@@ -255,7 +359,7 @@ const ChoreView = () => {
       setInfoCards(cards)
     }
   }, [chore, performers, completionCount, t])
-  const handleUpdatePriority = priority => {
+  const handleUpdatePriority = (priority: PriorityOption) => {
     UpdateChorePriority(choreId, priority.value).then(response => {
       if (response.ok) {
         response.json().then(() => {
@@ -352,7 +456,7 @@ const ChoreView = () => {
       } else {
         showError({
           title: t('choreView.undoFailed'),
-          message: error?.message || t('choreView.unableComplete'),
+          message: getErrorMessage(error) || t('choreView.unableComplete'),
         })
       }
     }
@@ -410,7 +514,7 @@ const ChoreView = () => {
       } else {
         showError({
           title: t('choreView.undoFailed'),
-          message: error?.message || t('choreView.unableSkip'),
+          message: getErrorMessage(error) || t('choreView.unableSkip'),
         })
       }
     }
@@ -541,7 +645,7 @@ const ChoreView = () => {
   const handleApproveChore = () => {
     ApproveChore(choreId).then(response => {
       if (response.ok) {
-        response.json().then(data => {
+        response.json().then((data: ApiResponse<Chore>) => {
           setChore(data.res)
           queryClient.invalidateQueries({ queryKey: ['chores'] })
         })
@@ -552,7 +656,7 @@ const ChoreView = () => {
   const handleRejectChore = () => {
     RejectChore(choreId).then(response => {
       if (response.ok) {
-        response.json().then(data => {
+        response.json().then((data: ApiResponse<Chore>) => {
           setChore(data.res)
           queryClient.invalidateQueries({ queryKey: ['chores'] })
         })
@@ -569,7 +673,7 @@ const ChoreView = () => {
         queryClient.invalidateQueries({ queryKey: ['chores'] })
       }
     } catch (error) {
-      const isNetworkError = err =>
+      const isNetworkError = (err: unknown) =>
         err instanceof TypeError && err.message === 'Failed to fetch'
       if (isNetworkError(error)) {
         const cmdId = await commandQueue.enqueue(
@@ -594,7 +698,7 @@ const ChoreView = () => {
       } else {
         showError({
           title: t('choreView.restoreFailed'),
-          message: error.message || t('choreView.unableRestore'),
+          message: getErrorMessage(error) || t('choreView.unableRestore'),
         })
       }
     }
@@ -627,7 +731,7 @@ const ChoreView = () => {
     } catch (error) {
       showError({
         title: t('choreView.failedArchive'),
-        message: error?.message || t('choreView.unableArchiveTask'),
+        message: getErrorMessage(error) || t('choreView.unableArchiveTask'),
       })
     }
   }
@@ -655,14 +759,14 @@ const ChoreView = () => {
         } catch (error) {
           showError({
             title: t('choreView.failedDelete'),
-            message: error?.message || t('choreView.unableDeleteTask'),
+            message: getErrorMessage(error) || t('choreView.unableDeleteTask'),
           })
         }
       },
     })
   }
 
-  const handleDueDateChange = async newDate => {
+  const handleDueDateChange = async (newDate: string | null) => {
     try {
       const response = await UpdateDueDate(choreId, newDate)
       if (response.ok) {
@@ -672,12 +776,12 @@ const ChoreView = () => {
     } catch (error) {
       showError({
         title: t('choreView.failedReschedule'),
-        message: error?.message || t('choreView.unableChangeDueDate'),
+        message: getErrorMessage(error) || t('choreView.unableChangeDueDate'),
       })
     }
   }
 
-  const handleMoveToProject = async project => {
+  const handleMoveToProject = async (project: ProjectOption | undefined) => {
     const projectId = project?.id ?? null
     try {
       const response = await SaveChore({ ...chore, projectId })
@@ -694,12 +798,13 @@ const ChoreView = () => {
     } catch (error) {
       showError({
         title: t('choreView.failedMoveTask'),
-        message: error?.message || t('choreView.unableMoveTaskToProject'),
+        message:
+          getErrorMessage(error) || t('choreView.unableMoveTaskToProject'),
       })
     }
   }
 
-  const handleNudge = async ({ message, notifyAllAssignees }) => {
+  const handleNudge = async ({ message, notifyAllAssignees }: NudgePayload) => {
     try {
       const response = await NudgeChore(choreId, {
         message,
@@ -716,7 +821,7 @@ const ChoreView = () => {
     } catch (error) {
       showError({
         title: t('choreView.failedSendNudgeTitle'),
-        message: error?.message || t('choreView.unableSendNudge'),
+        message: getErrorMessage(error) || t('choreView.unableSendNudge'),
       })
     }
   }
@@ -726,7 +831,7 @@ const ChoreView = () => {
   // assigning someone should always just work, so this adds them to the pool
   // first (existing per-chore state, no dedicated endpoint for it) and only
   // then assigns.
-  const handleAssigneeChange = async assigneeId => {
+  const handleAssigneeChange = async (assigneeId: number) => {
     try {
       const isInPool = (chore.assignees || []).some(
         a => a.userId === assigneeId,
@@ -747,14 +852,18 @@ const ChoreView = () => {
     } catch (error) {
       showError({
         title: t('choreView.failedDelegate'),
-        message: error?.message || t('choreView.unableChangeAssignee'),
+        message: getErrorMessage(error) || t('choreView.unableChangeAssignee'),
       })
     }
   }
 
   // Actions the menu raises that ChoreView owns; the rest of its items either
   // navigate on their own or come in through the dedicated callbacks.
-  const handleMenuAction = (type, _chore, extraData) => {
+  const handleMenuAction = (
+    type: string,
+    _chore: unknown,
+    extraData?: MenuActionExtraData,
+  ) => {
     switch (type) {
       case 'skip':
         confirmSkipTask()
@@ -784,7 +893,8 @@ const ChoreView = () => {
     if (!circleMembersData?.res || !chore) return false
 
     const currentUser = circleMembersData.res.find(
-      member => member.userId === (impersonatedUser?.userId || userProfile?.id),
+      (member: CircleMember) =>
+        member.userId === (impersonatedUser?.userId || userProfile?.id),
     )
 
     // User can approve/reject if they are:
@@ -811,6 +921,8 @@ const ChoreView = () => {
           title={t('choreView.notFoundTitle')}
           description={t('choreView.notFoundDescription')}
           primaryAction={{ label: t('archived.backToTasks'), to: '/chores' }}
+          secondaryAction={undefined}
+          sx={undefined}
         />
       </Container>
     )
@@ -888,7 +1000,7 @@ const ChoreView = () => {
             </Chip>
           ))}
 
-          {chore?.attachments?.length > 0 && (
+          {!!chore?.attachments?.length && (
             <Chip
               startDecorator={<AttachFile />}
               size='md'
@@ -911,11 +1023,11 @@ const ChoreView = () => {
             mb: 1,
           }}
         >
-          {[ChoreStatus.ACTIVE, ChoreStatus.PAUSED].includes(chore.status) && (
+          {TIMER_STATUSES.includes(chore.status) && (
             <Grid xs={12}>
               <TimePassedCard
                 chore={chore}
-                handleAction={action => {
+                handleAction={(action: string) => {
                   if (action === 'pause') {
                     handleChorePause()
                   } else if (
@@ -1042,7 +1154,7 @@ const ChoreView = () => {
           </Button>
           <ChoreActionMenu
             chore={chore}
-            hiddenActions={['view']}
+            hiddenActions={['view'] as never[]}
             onAction={handleMenuAction}
             onWriteNFC={() => setActiveModal('writeNFC')}
             onCompleteWithNote={() => setNote('')}
@@ -1052,6 +1164,11 @@ const ChoreView = () => {
             onChangeDueDate={() => setActiveModal('changeDueDate')}
             onChangePriority={handleUpdatePriority}
             onDelete={confirmDeleteChore}
+            anchorEl={undefined}
+            onClose={undefined}
+            onMouseEnter={undefined}
+            onMouseLeave={undefined}
+            onOpen={undefined}
             trigger={
               <Button
                 size='sm'
@@ -1226,13 +1343,14 @@ const ChoreView = () => {
                 editMode={false}
                 performers={performers}
                 tasks={subTasks}
-                setTasks={tasks => {
+                setTasks={(tasks: SubTask[]) => {
                   setChore({
                     ...chore,
                     subTasks: tasks,
                   })
                 }}
-                choreId={choreId}
+                choreId={Number(choreId ?? 0)}
+                onToggleSettled={undefined}
               />
             </Sheet>
           </Box>
@@ -1244,7 +1362,7 @@ const ChoreView = () => {
           p: 2,
           borderRadius: 'md',
           boxShadow: 'sm',
-          paddingBottom: getSafeBottomPadding(2, '8px'),
+          paddingBottom: getSafeBottomPadding(2),
         }}
         variant='soft'
       >
@@ -1427,9 +1545,7 @@ const ChoreView = () => {
                     fullWidth
                     size='lg'
                     onClick={handleTaskCompletion}
-                    disabled={
-                      notInCompletionWindow(chore) || chore.isActive === false
-                    }
+                    disabled={!!notInCompletionWindow(chore)}
                     color='success'
                     startDecorator={<Check />}
                     sx={{
@@ -1443,9 +1559,7 @@ const ChoreView = () => {
                     fullWidth
                     size='lg'
                     onClick={confirmSkipTask}
-                    disabled={
-                      notInCompletionWindow(chore) || chore.isActive === false
-                    }
+                    disabled={!!notInCompletionWindow(chore)}
                     startDecorator={<SwitchAccessShortcut />}
                     sx={{
                       flex: 1,
@@ -1469,15 +1583,14 @@ const ChoreView = () => {
               </Typography>
             )}
             {/* Timer Button - Show split button when timer is active, regular button otherwise */}
-            {[ChoreStatus.ACTIVE, ChoreStatus.PAUSED].includes(chore.status) ? (
+            {TIMER_STATUSES.includes(chore.status) ? (
               <TimerSplitButton
                 disabled={
-                  (chore.status === ChoreStatus.PAUSED &&
-                    notInCompletionWindow(chore)) ||
-                  chore.isActive === false
+                  chore.status === ChoreStatus.PAUSED &&
+                  !!notInCompletionWindow(chore)
                 }
                 chore={chore}
-                onAction={action => {
+                onAction={(action: string) => {
                   if (action === 'pause') {
                     handleChorePause()
                   } else if (action === 'resume') {
@@ -1499,9 +1612,7 @@ const ChoreView = () => {
                 }}
                 variant='soft'
                 color='success'
-                disabled={
-                  notInCompletionWindow(chore) || chore.isActive === false
-                }
+                disabled={!!notInCompletionWindow(chore)}
                 startDecorator={<PlayArrow />}
                 sx={{
                   flex: 1,
@@ -1522,7 +1633,7 @@ const ChoreView = () => {
             title={t('choreView.changeDueDate', 'Change due date')}
             {...splitDueDate(chore.nextDueDate)}
             onClose={() => setActiveModal(null)}
-            onApply={parts => {
+            onApply={(parts: ReturnType<typeof splitDueDate>) => {
               handleDueDateChange(combineDueDate(parts)?.toISOString() ?? null)
               setActiveModal(null)
             }}
@@ -1530,12 +1641,14 @@ const ChoreView = () => {
               handleDueDateChange(null)
               setActiveModal(null)
             }}
+            applyLabel={undefined}
+            excludeChoreIds={undefined}
           />
         )}
         {activeModal === 'changeAssignee' && (
           <AssigneeModal
             isOpen={true}
-            members={performers}
+            members={performers as never[]}
             assignedTo={chore.assignedTo}
             title={t('choreView.delegateToSomeoneElse')}
             onClose={() => setActiveModal(null)}

@@ -1,4 +1,75 @@
-const VALID_DAYS = {
+import type { Chrono } from 'chrono-node'
+
+export type Highlight = {
+  text: string
+  start: number
+  end: number
+}
+
+type ParseOutcome<T> = {
+  result: T | null
+  highlight?: Highlight[]
+  cleanedSentence: string
+}
+
+type FrequencyPatternType =
+  | 'day_of_the_month:every'
+  | 'days_of_the_week:nth_occurrence'
+  | 'days_of_the_week:nth_occurrence_multiple'
+  | 'daily'
+  | 'daily:time'
+  | 'weekly'
+  | 'monthly'
+  | 'yearly'
+  | 'interval:2week'
+  | 'interval'
+  | 'interval:every_other'
+  | 'days_of_the_week'
+  | 'day_of_the_month'
+
+type FrequencyPattern = {
+  frequencyType: FrequencyPatternType
+  regex: RegExp
+  name: string
+  value?: number
+}
+
+type FrequencyMetadata = {
+  days: string[]
+  months: string[]
+  unit: string | null
+  time: string
+  weekPattern?: string
+  occurrences?: number[]
+}
+
+export type Frequency = {
+  frequency: number
+  frequencyType: string | null
+  frequencyMetadata: FrequencyMetadata
+}
+
+type FrequencyParseOutcome = ParseOutcome<Frequency> & {
+  name: string | null
+  dueDate?: string
+}
+
+type PriorityParseOutcome = {
+  result: string | 0
+  highlight: Highlight[]
+  cleanedSentence: string
+}
+
+type AssignableUser = {
+  userId: number
+  displayName?: string | undefined
+}
+
+type AssigneesParseOutcome<T> = ParseOutcome<T[]> & {
+  isAnyone: boolean
+}
+
+const VALID_DAYS: Record<string, string> = {
   monday: 'Monday',
   mon: 'Monday',
   tuesday: 'Tuesday',
@@ -15,7 +86,7 @@ const VALID_DAYS = {
   sun: 'Sunday',
 }
 
-const VALID_MONTHS = {
+const VALID_MONTHS: Record<string, string> = {
   january: 'January',
   jan: 'January',
   february: 'February',
@@ -41,7 +112,7 @@ const VALID_MONTHS = {
   dec: 'December',
 }
 
-const FREQUENCY_PATTERNS = [
+const FREQUENCY_PATTERNS: FrequencyPattern[] = [
   {
     frequencyType: 'day_of_the_month:every',
     regex: /(\d+)(?:th|st|nd|rd)? of every month/i,
@@ -120,7 +191,11 @@ const FREQUENCY_PATTERNS = [
 
 // Helper function to validate word boundaries for date/time matches
 // Prevents matching partial words like 'wed' in 'wedding', 'fri' in 'friend', etc.
-const isValidWordBoundary = (text, matchIndex, matchLength) => {
+const isValidWordBoundary = (
+  text: string,
+  matchIndex: number,
+  matchLength: number,
+): boolean => {
   const charBefore = matchIndex > 0 ? text[matchIndex - 1] : ' '
   const charAfter =
     matchIndex + matchLength < text.length
@@ -132,9 +207,9 @@ const isValidWordBoundary = (text, matchIndex, matchLength) => {
   )
 }
 
-export const parsePriority = inputSentence => {
+export const parsePriority = (inputSentence: string): PriorityParseOutcome => {
   let sentence = inputSentence.toLowerCase()
-  const priorityMap = {
+  const priorityMap: Record<number, string[]> = {
     1: ['!p1', 'priority 1', 'high priority', 'urgent', 'asap', 'important'],
     2: ['!p2', 'priority 2', 'medium priority'],
     3: ['!p3', 'priority 3', 'low priority'],
@@ -170,14 +245,39 @@ export const parsePriority = inputSentence => {
   }
 }
 
-export const parseTrigger = (inputSentence, trigger, items) => {
-  lcSentence = inputSentence.toLowerCase()
-}
+// export const parseTrigger = <T extends { name: string }>(
+//   inputSentence: string,
+//   trigger: RegExp,
+//   items: T[],
+// ): ParseOutcome<T[]> => {
+//   const curTrigger: T[] = []
+//   const allHighlights: Highlight[] = []
+//
+//   const sortedTriggers = [...items].sort(
+//     (a, b) => b.name.length - a.name.length,
+//   )
+//
+//   const lcSentence = inputSentence.toLowerCase()
+//   let match: RegExpExecArray | null
+//   while ((match = trigger.exec(lcSentence)) !== null) {
+//     const startIdx = match.index
+//     const rest = lcSentence.slice(startIdx + 1)
+//   }
+//
+//   return {
+//     result: curTrigger,
+//     highlight: allHighlights,
+//     cleanedSentence: inputSentence,
+//   }
+// }
 
-export const parseLabels = (inputSentence, userLabels) => {
-  const currentLabels = []
-  const matchedRanges = []
-  const allHighlights = []
+export const parseLabels = <T extends { name: string }>(
+  inputSentence: string,
+  userLabels: T[],
+): ParseOutcome<T[]> => {
+  const currentLabels: T[] = []
+  const matchedRanges: { start: number; end: number }[] = []
+  const allHighlights: Highlight[] = []
 
   // Labels can contain spaces (e.g. "New Label"), so a plain word-boundary
   // regex can't capture them — check each '#' against real label names
@@ -185,10 +285,11 @@ export const parseLabels = (inputSentence, userLabels) => {
   const sortedLabels = [...userLabels].sort(
     (a, b) => b.name.length - a.name.length,
   )
-  const isWordChar = ch => ch !== undefined && /[\p{L}\p{N}_]/u.test(ch)
+  const isWordChar = (ch: string | undefined): boolean =>
+    ch !== undefined && /[\p{L}\p{N}_]/u.test(ch)
 
   const hashPattern = /#/g
-  let hashMatch
+  let hashMatch: RegExpExecArray | null
   while ((hashMatch = hashPattern.exec(inputSentence)) !== null) {
     const startIndex = hashMatch.index
     const rest = inputSentence.slice(startIndex + 1)
@@ -243,9 +344,11 @@ export const parseLabels = (inputSentence, userLabels) => {
   }
 }
 
-export const parseFrequency = inputSentence => {
+export const parseFrequency = (
+  inputSentence: string,
+): FrequencyParseOutcome => {
   const sentence = inputSentence.toLowerCase()
-  const result = {
+  const result: Frequency = {
     frequency: 1,
     frequencyType: null,
     frequencyMetadata: {
@@ -273,7 +376,7 @@ export const parseFrequency = inputSentence => {
       case 'monthly':
       case 'yearly':
         result.frequencyType = 'interval'
-        result.frequency = pattern.value || 1
+        result.frequency = pattern.value ?? 1
         result.frequencyMetadata.unit = unitMap[pattern.frequencyType]
         return {
           result,
@@ -294,7 +397,7 @@ export const parseFrequency = inputSentence => {
         return {
           result,
           name: pattern.name
-            .replace('{frequency}', result.frequency)
+            .replace('{frequency}', String(result.frequency))
             .replace('{unit}', result.frequencyMetadata.unit),
           highlight: [
             {
@@ -371,7 +474,7 @@ export const parseFrequency = inputSentence => {
         return {
           result,
           name: pattern.name
-            .replace('{day}', result.frequency)
+            .replace('{day}', String(result.frequency))
             .replace('{months}', result.frequencyMetadata.months.join(', ')),
           highlight: [
             {
@@ -446,7 +549,7 @@ export const parseFrequency = inputSentence => {
 
         return {
           result,
-          name: pattern.name.replace('{day}', dayOfMonth),
+          name: pattern.name.replace('{day}', String(dayOfMonth)),
           dueDate: suggestedDueDate.toISOString(),
           highlight: [
             {
@@ -479,7 +582,7 @@ export const parseFrequency = inputSentence => {
         const dayName = match[2].toLowerCase()
 
         // Map occurrence words to numbers
-        const occurrenceMap = {
+        const occurrenceMap: Record<string, number> = {
           first: 1,
           '1st': 1,
           second: 2,
@@ -540,7 +643,7 @@ export const parseFrequency = inputSentence => {
           .filter(word => word.trim())
           .map(word => {
             const cleanWord = word.replace(',', '').trim()
-            const occurrenceMap = {
+            const occurrenceMap: Record<string, number> = {
               first: 1,
               '1st': 1,
               second: 2,
@@ -593,11 +696,14 @@ export const parseFrequency = inputSentence => {
   }
 }
 
-export const parseAssignees = (inputSentence, users) => {
+export const parseAssignees = <T extends AssignableUser>(
+  inputSentence: string,
+  users: T[],
+): AssigneesParseOutcome<T> => {
   const sentence = inputSentence.toLowerCase()
-  const result = []
-  const highlight = []
-  const matchedTexts = []
+  const result: T[] = []
+  const highlight: Highlight[] = []
+  const matchedTexts: { pattern: string; original: string }[] = []
 
   // Check for @Anyone first (special case)
   const anyoneRegex = /@anyone(?=\s|$)/i
@@ -634,7 +740,7 @@ export const parseAssignees = (inputSentence, users) => {
 
   // Sort users by longest displayName first to avoid partial matches
   const sortedUsers = users.sort(
-    (a, b) => (b.displayName?.length || 0) - (a.displayName?.length || 0),
+    (a, b) => (b.displayName?.length ?? 0) - (a.displayName?.length ?? 0),
   )
 
   for (const user of sortedUsers) {
@@ -689,7 +795,7 @@ export const parseAssignees = (inputSentence, users) => {
   return { result: null, isAnyone: false, cleanedSentence: sentence }
 }
 
-export const parsePoints = inputSentence => {
+export const parsePoints = (inputSentence: string): ParseOutcome<number> => {
   let sentence = inputSentence.toLowerCase()
   const pointsPattern = /\*(\d+)\s*(?:points?)?/gi
   const match = sentence.match(pointsPattern)
@@ -728,7 +834,10 @@ export const parsePoints = inputSentence => {
   }
 }
 
-export const parseDueDate = (inputSentence, chrono) => {
+export const parseDueDate = (
+  inputSentence: string,
+  chrono: Pick<Chrono, 'parse'>,
+): ParseOutcome<Date> => {
   // Parse the due date using chrono
   const parsedDueDate = chrono.parse(inputSentence, new Date(), {
     forwardDate: true,

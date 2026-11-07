@@ -8,23 +8,24 @@
 
 import completeSoundUrl from '@/assets/complete-sound.mp3'
 
-// One shared element so repeat completions don't re-fetch the file.
-let completeSound = null
-
-const playCompleteSound = () => {
-  try {
-    if (!completeSound) completeSound = new Audio(completeSoundUrl)
-    completeSound.currentTime = 0
-    completeSound.play().catch(() => {})
-  } catch {
-    // sound is decoration too
-  }
+type PointerSnapshot = {
+  x: number
+  y: number
+  at: number
 }
 
-// Completions resolve after an API round-trip, by which time the click event
-// is gone, so remember where the user last pressed and burst from there.
+let completeSound: HTMLAudioElement | null = null
+
+const playCompleteSound = (): void => {
+  try {
+    completeSound ??= new Audio(completeSoundUrl)
+    completeSound.currentTime = 0
+    completeSound.play().catch(() => {})
+  } catch {}
+}
+
 const POINTER_FRESH_MS = 5000
-let lastPointer = null
+let lastPointer: PointerSnapshot | null = null
 
 if (typeof window !== 'undefined') {
   window.addEventListener(
@@ -36,13 +37,16 @@ if (typeof window !== 'undefined') {
   )
 }
 
-export const celebrate = async () => {
+export const celebrate = async (): Promise<void> => {
   playCompleteSound()
   try {
     const party = await import('party-js')
-    const fresh = lastPointer && Date.now() - lastPointer.at < POINTER_FRESH_MS
-    const x = fresh ? lastPointer.x : window.innerWidth / 2
-    const y = fresh ? lastPointer.y : window.innerHeight / 2
+    const pointer =
+      lastPointer && Date.now() - lastPointer.at < POINTER_FRESH_MS
+        ? lastPointer
+        : null
+    const x = pointer ? pointer.x : window.innerWidth / 2
+    const y = pointer ? pointer.y : window.innerHeight / 2
     party.confetti(new party.Circle(window.scrollX + x, window.scrollY + y), {
       count: party.variation.range(80, 100),
     })

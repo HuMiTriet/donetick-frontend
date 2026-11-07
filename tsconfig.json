@@ -14,6 +14,7 @@
     "noPropertyAccessFromIndexSignature": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
+    "skipLibCheck": true,
     "strict": true,
     "strictBindCallApply": true,
     "strictFunctionTypes": true,
@@ -22,9 +23,12 @@
     "useUnknownInCatchVariables": true,
 
     // Modules
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
-    "rootDir": "src",
+    "allowJs": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
 
     // Emit
     "outDir": "dist",
@@ -32,6 +36,8 @@
     "sourceRoot": "./src/",
 
     // Language and Environment
+    "jsx": "react-jsx",
     "target": "ES2020"
-  }
+  },
+  "include": ["src", "capacitor.config.ts"]
 }

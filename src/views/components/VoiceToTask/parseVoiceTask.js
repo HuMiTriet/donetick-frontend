@@ -7,10 +7,10 @@ import { generateUUID } from '../../../utils/UUID'
 import {
   parseAssignees,
   parseDueDate,
+  parseFrequency,
   parseLabels,
   parsePoints,
   parsePriority,
-  parseRepeatV2,
 } from '../CustomParsers'
 
 // Pure equivalent of AddTaskModal.processText — parses one sentence into a
@@ -71,7 +71,7 @@ export const parseVoiceTask = (
   const points = parsePoints(sentence)
   const labels = parseLabels(sentence, userLabels)
   const assigneesResult = parseAssignees(sentence, assigneesForParsing)
-  const repeat = parseRepeatV2(sentence)
+  const repeat = parseFrequency(sentence)
   const dueDateParsed = parseDueDate(sentence, chrono)
 
   // Sequential cleanup — identical chain to AddTaskModal.processText
@@ -90,7 +90,7 @@ export const parseVoiceTask = (
     if (reparse.result) cleaned = reparse.cleanedSentence
   }
   if (repeat.result) {
-    const reparse = parseRepeatV2(cleaned)
+    const reparse = parseFrequency(cleaned)
     if (reparse.result) cleaned = reparse.cleanedSentence
   }
   if (dueDateParsed.result) {

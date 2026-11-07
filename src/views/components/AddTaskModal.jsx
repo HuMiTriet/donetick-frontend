@@ -49,10 +49,10 @@ import AttachmentPickerField from './AttachmentPickerField'
 import {
   parseAssignees,
   parseDueDate,
+  parseFrequency,
   parseLabels,
   parsePoints,
   parsePriority,
-  parseRepeatV2,
 } from './CustomParsers'
 import DueDatePickerField from './DueDatePickerField'
 import { combineDueDate } from './DueDatePickerModal'
@@ -192,7 +192,7 @@ const POINTS_SUGGESTIONS = {
 // Delay between the last keystroke and the smart-input parse. Parsing (chrono
 // especially) is too heavy to run per keystroke; submitChore flushes a pending
 // parse so a fast type-then-Enter never creates from stale parsed state.
-const PARSE_DEBOUNCE_MS = 150
+const PARSE_DEBOUNCE_MS = 300
 
 const TaskInput = ({ initialMode, isModalOpen, onChoreUpdate, onClose }) => {
   const { t } = useTranslation('chores')
@@ -682,7 +682,7 @@ const TaskInput = ({ initialMode, isModalOpen, onChoreUpdate, onClose }) => {
       const labels = parseLabels(sentence, userLabels || [])
 
       const assigneesResult = parseAssignees(sentence, assigneesForParsing)
-      const repeat = parseRepeatV2(sentence)
+      const repeat = parseFrequency(sentence)
       const dueDateParsed = parseDueDate(sentence, chrono)
 
       // Set all the parsed values
@@ -740,10 +740,6 @@ const TaskInput = ({ initialMode, isModalOpen, onChoreUpdate, onClose }) => {
         syncDueDateStates(repeat.dueDate)
       }
 
-      // Create the cleaned sentence by sequentially applying all cleanups.
-      // Each stage only needs a reparse when an earlier cleanup actually
-      // changed the sentence; otherwise the first-pass result (computed on the
-      // identical string) is reused as-is.
       let cleanedSentence = sentence
       if (priority.result) cleanedSentence = priority.cleanedSentence
       if (pointsParsed.result) {
@@ -772,7 +768,9 @@ const TaskInput = ({ initialMode, isModalOpen, onChoreUpdate, onClose }) => {
       }
       if (repeat.result) {
         const repeatReparse =
-          cleanedSentence === sentence ? repeat : parseRepeatV2(cleanedSentence)
+          cleanedSentence === sentence
+            ? repeat
+            : parseFrequency(cleanedSentence)
         if (repeatReparse.result)
           cleanedSentence = repeatReparse.cleanedSentence
       }

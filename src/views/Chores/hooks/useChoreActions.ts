@@ -1,6 +1,6 @@
-import { useQueryClient } from '@tanstack/react-query'
+import { type UseMutationResult, useQueryClient } from '@tanstack/react-query'
 import moment from 'moment'
-import { useCallback } from 'react'
+import { type Dispatch, type SetStateAction, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -8,6 +8,14 @@ import {
   useUnArchiveChore,
 } from '../../../queries/ChoreQueries'
 import { usePauseChore, useStartChore } from '../../../queries/TimeQueries'
+import type {
+  ApiResponse,
+  Chore,
+  ChoreDetail,
+  CircleMember,
+  Label,
+  User,
+} from '../../../types/models'
 import { celebrate } from '../../../utils/Celebrate'
 import { commandQueue, CommandType } from '../../../utils/CommandQueue'
 import {
@@ -26,22 +34,137 @@ import {
 import { offlineDB } from '../../../utils/OfflineDB'
 import { isOfflineFeatureEnabled } from '../../../utils/OfflineFeatureToggle'
 
+type ChoreEvent =
+  | 'approved'
+  | 'archive'
+  | 'assigned'
+  | 'completed'
+  | 'deleted'
+  | 'due-date-removed'
+  | 'moved-to-project'
+  | 'paused'
+  | 'priority-changed'
+  | 'rejected'
+  | 'rescheduled'
+  | 'skipped'
+  | 'started'
+  | 'unarchive'
+
+type NotificationInput = {
+  message?: string | undefined
+  title?: string
+  undoAction?: () => Promise<void>
+}
+
+type Notify = (notification: NotificationInput) => void
+
+type ConfirmModalConfig = {
+  cancelText?: string
+  confirmText?: string
+  isOpen?: boolean
+  message?: string
+  onClose?: (isConfirmed: boolean) => Promise<void>
+  title?: string
+}
+
+type ProjectTarget = {
+  id: number | null
+  name?: string
+}
+
+type ChoreActionExtraData = {
+  date?: string | null
+  priority?: number
+  project?: ProjectTarget
+}
+
+type DueDateParts = {
+  dueDateOnly: string
+  dueTime: string | null
+  useCustomTime: boolean
+}
+
+type ChoreTimerState = Pick<
+  ChoreDetail,
+  'duration' | 'status' | 'syncVersion' | 'timerUpdatedAt'
+>
+
+type ChoreTimerMutation = UseMutationResult<
+  ApiResponse<ChoreTimerState> | undefined,
+  Error,
+  number
+>
+
+type BulkConfirm = {
+  confirmText: string
+  message: string
+  title: string
+}
+
+type RunBulkOptions = {
+  buildUndo?: (succeeded: Chore[]) => () => Promise<void>
+  confirm?: BulkConfirm
+  failedTitle?: string
+  failureVerb: string
+  onSucceeded?: (succeeded: Chore[]) => void
+  perChore: (chore: Chore) => Promise<unknown>
+  successTitle: string
+  successVerb: string
+  targets: Chore[]
+}
+
+type NudgeRequest = {
+  choreId: number
+  message: string
+  notifyAllAssignees: boolean
+}
+
+type UseChoreActionsParams = {
+  chores: Chore[]
+  clearSelection: () => void
+  closeModal: () => void
+  getSelectedChoresData: (chores: Chore[]) => Chore[]
+  impersonatedUser: CircleMember | null
+  modalChore: Chore | null
+  openModal: (
+    action: string,
+    chore: Chore,
+    extraData: ChoreActionExtraData,
+  ) => void
+  refetchChores: () => void
+  setChores: Dispatch<SetStateAction<Chore[]>>
+  setConfirmModelConfig: (config: ConfirmModalConfig) => void
+  showError: Notify
+  showSuccess: Notify
+  showUndo: Notify
+  showWarning: Notify
+  userProfile: User | null | undefined
+}
+
 // Effectively "can this action be queued offline?" — requires the offline
 // feature, otherwise there is no command queue to replay it later.
-const isNetworkError = err =>
+const isNetworkError = (err: unknown) =>
   isOfflineFeatureEnabled() &&
   err instanceof TypeError &&
   err.message === 'Failed to fetch'
 
-const plural = count => (count === 1 ? '' : 's')
-const taskCount = count => `${count} task${plural(count)}`
+const errorMessage = (error: unknown) =>
+  typeof error === 'object' &&
+  error !== null &&
+  'message' in error &&
+  typeof error.message === 'string'
+    ? error.message
+    : undefined
+
+const plural = (count: number) => (count === 1 ? '' : 's')
+const taskCount = (count: number) => `${count} task${plural(count)}`
 
 // "No specific time" is stored as end of day, and it has to be exactly
 // 23:59:59 — that stamp is what ChoreEdit writes and what the task card checks
 // to render "Today" rather than "Today 11:59 PM". Rebuilding from HH:mm alone
 // would land on :00 seconds and lose that meaning.
 const END_OF_DAY = '23:59'
-const atTimeOfDay = (date, time) =>
+const atTimeOfDay = (date: string, time: string | null) =>
   (!time || time === END_OF_DAY
     ? moment(date, 'YYYY-MM-DD').endOf('day')
     : moment(`${date} ${time}`, 'YYYY-MM-DD HH:mm')
@@ -49,8 +172,8 @@ const atTimeOfDay = (date, time) =>
 
 // Fetcher calls resolve with a Response even on 4xx/5xx, so a bulk run has to
 // check explicitly or it will report failures as successes.
-const expectOk = async request => {
-  const response = await request
+const expectOk = async (request: Promise<unknown>) => {
+  const response = (await request) as Response | null | undefined
   if (!response?.ok) throw new Error('Request failed')
   return response
 }
@@ -71,16 +194,20 @@ export const useChoreActions = ({
   showUndo,
   showWarning,
   userProfile,
-}) => {
+}: UseChoreActionsParams) => {
   const { t } = useTranslation('chores')
   const queryClient = useQueryClient()
   const archiveChore = useArchiveChore()
   const unarchiveChore = useUnArchiveChore()
-  const startChore = useStartChore()
-  const pauseChore = usePauseChore()
+  const startChore = useStartChore() as unknown as ChoreTimerMutation
+  const pauseChore = usePauseChore() as unknown as ChoreTimerMutation
 
   const updateChoreInState = useCallback(
-    (updatedChore, event, { skipInvalidation = false } = {}) => {
+    (
+      updatedChore: Chore,
+      event: ChoreEvent,
+      { skipInvalidation = false }: { skipInvalidation?: boolean } = {},
+    ) => {
       let newChores = chores.map(c =>
         c.id === updatedChore.id ? updatedChore : c,
       )
@@ -99,7 +226,7 @@ export const useChoreActions = ({
         queryClient.invalidateQueries({ queryKey: ['chores'] })
       }
 
-      const undoableActions = {
+      const undoableActions: Partial<Record<ChoreEvent, string>> = {
         completed: 'Task completed',
         approved: 'Task approved',
         rejected: 'Task rejected',
@@ -111,10 +238,12 @@ export const useChoreActions = ({
           message: undoableActions[event],
           undoAction: async () => {
             try {
-              const undoResponse = await UndoChoreAction(updatedChore.id)
+              const undoResponse = (await UndoChoreAction(
+                updatedChore.id,
+              )) as Response
               if (undoResponse.ok) {
                 queryClient.invalidateQueries({ queryKey: ['chores'] })
-                const undoMessages = {
+                const undoMessages: Partial<Record<ChoreEvent, string>> = {
                   completed: 'Task completion has been undone.',
                   approved: 'Task approval has been undone.',
                   rejected: 'Task rejection has been undone.',
@@ -127,7 +256,7 @@ export const useChoreActions = ({
               } else {
                 throw new Error(t('choreView.unableUndo'))
               }
-            } catch (error) {
+            } catch {
               showError({
                 title: t('choreView.undoFailed'),
                 message: t('choreView.undoFailedMessage'),
@@ -138,7 +267,12 @@ export const useChoreActions = ({
         return
       }
 
-      const notifications = {
+      const notifications: Partial<
+        Record<
+          ChoreEvent,
+          { message: string; title: string; type: 'success' | 'warning' }
+        >
+      > = {
         rescheduled: {
           type: 'success',
           title: t('actions.rescheduledTitle'),
@@ -196,34 +330,43 @@ export const useChoreActions = ({
   )
 
   const handleChoreAction = useCallback(
-    async (action, chore, extraData = {}) => {
+    async (
+      action: string,
+      chore: Chore,
+      extraData: ChoreActionExtraData = {},
+    ) => {
       switch (action) {
         case 'complete':
           try {
-            const response = await MarkChoreComplete(
+            const response = (await MarkChoreComplete(
               chore.id,
               impersonatedUser
                 ? { completedBy: impersonatedUser.userId }
                 : null,
               null,
               null,
-            )
+            )) as Response
             if (response.ok) {
               celebrate()
               // Online: hide the chore and show undo
               setChores(prev => prev.filter(c => c.id !== chore.id))
-              queryClient.setQueriesData({ queryKey: ['chores'] }, oldData => {
-                if (!oldData || !oldData.res) return oldData
-                return {
-                  ...oldData,
-                  res: oldData.res.filter(c => c.id !== chore.id),
-                }
-              })
+              queryClient.setQueriesData<ApiResponse<Chore[]>>(
+                { queryKey: ['chores'] },
+                oldData => {
+                  if (!oldData || !oldData.res) return oldData
+                  return {
+                    ...oldData,
+                    res: oldData.res.filter(c => c.id !== chore.id),
+                  }
+                },
+              )
               showSuccess({
                 message: t('actions.undoable.completed'),
                 undoAction: async () => {
                   try {
-                    const undoResponse = await UndoChoreAction(chore.id)
+                    const undoResponse = (await UndoChoreAction(
+                      chore.id,
+                    )) as Response
                     if (undoResponse.ok) {
                       queryClient.invalidateQueries({ queryKey: ['chores'] })
                       showUndo({
@@ -246,7 +389,7 @@ export const useChoreActions = ({
           } catch (error) {
             if (isNetworkError(error)) {
               // Offline — queue and show pending badge on the chore (don't hide it)
-              const cmdId = await commandQueue.enqueue(
+              const cmdId: unknown = await commandQueue.enqueue(
                 CommandType.COMPLETE_CHORE,
                 chore.id,
                 {
@@ -285,36 +428,39 @@ export const useChoreActions = ({
             } else {
               showError({
                 title: t('actions.failCompleteTitle'),
-                message: error?.message || 'Unable to complete chore',
+                message: errorMessage(error) || 'Unable to complete chore',
               })
             }
           }
           break
 
         case 'start': {
-          const startedChore = { ...chore, status: 1 }
+          const startedChore: Chore = { ...chore, status: 1 }
           try {
             const data = await startChore.mutateAsync(chore.id)
             // Merge the server's timer fields (timerUpdatedAt, duration,
             // syncVersion) so the cached chore matches the backend.
             const updatedChore = { ...startedChore, ...data?.res }
             queryClient.cancelQueries({ queryKey: ['chores'] })
-            queryClient.setQueryData(['chores', false], oldData => {
-              if (!oldData?.res) return oldData
-              return {
-                ...oldData,
-                res: oldData.res.map(c =>
-                  c.id === chore.id ? updatedChore : c,
-                ),
-              }
-            })
+            queryClient.setQueryData<ApiResponse<Chore[]>>(
+              ['chores', false],
+              oldData => {
+                if (!oldData?.res) return oldData
+                return {
+                  ...oldData,
+                  res: oldData.res.map(c =>
+                    c.id === chore.id ? updatedChore : c,
+                  ),
+                }
+              },
+            )
             updateChoreInState(updatedChore, 'started', {
               skipInvalidation: true,
             })
           } catch (error) {
             if (isNetworkError(error)) {
               const previousStatus = chore.status
-              const cmdId = await commandQueue.enqueue(
+              const cmdId: unknown = await commandQueue.enqueue(
                 CommandType.START_CHORE,
                 chore.id,
                 { id: chore.id },
@@ -340,7 +486,7 @@ export const useChoreActions = ({
             } else {
               showError({
                 title: t('actions.failStartTitle'),
-                message: error?.message || 'Unable to start chore',
+                message: errorMessage(error) || 'Unable to start chore',
               })
             }
           }
@@ -348,29 +494,32 @@ export const useChoreActions = ({
         }
 
         case 'pause': {
-          const pausedChore = { ...chore, status: 2 }
+          const pausedChore: Chore = { ...chore, status: 2 }
           try {
             const data = await pauseChore.mutateAsync(chore.id)
             // Merge the server's timer fields (timerUpdatedAt, duration,
             // syncVersion) so the cached chore matches the backend.
             const updatedChore = { ...pausedChore, ...data?.res }
             queryClient.cancelQueries({ queryKey: ['chores'] })
-            queryClient.setQueryData(['chores', false], oldData => {
-              if (!oldData?.res) return oldData
-              return {
-                ...oldData,
-                res: oldData.res.map(c =>
-                  c.id === chore.id ? updatedChore : c,
-                ),
-              }
-            })
+            queryClient.setQueryData<ApiResponse<Chore[]>>(
+              ['chores', false],
+              oldData => {
+                if (!oldData?.res) return oldData
+                return {
+                  ...oldData,
+                  res: oldData.res.map(c =>
+                    c.id === chore.id ? updatedChore : c,
+                  ),
+                }
+              },
+            )
             updateChoreInState(updatedChore, 'paused', {
               skipInvalidation: true,
             })
           } catch (error) {
             if (isNetworkError(error)) {
               const previousStatus = chore.status
-              const cmdId = await commandQueue.enqueue(
+              const cmdId: unknown = await commandQueue.enqueue(
                 CommandType.PAUSE_CHORE,
                 chore.id,
                 { id: chore.id },
@@ -396,7 +545,7 @@ export const useChoreActions = ({
             } else {
               showError({
                 title: t('actions.failPauseTitle'),
-                message: error?.message || 'Unable to pause chore',
+                message: errorMessage(error) || 'Unable to pause chore',
               })
             }
           }
@@ -405,30 +554,30 @@ export const useChoreActions = ({
 
         case 'approve':
           try {
-            const response = await ApproveChore(chore.id)
+            const response = (await ApproveChore(chore.id)) as Response
             if (response.ok) {
-              const data = await response.json()
+              const data = (await response.json()) as ApiResponse<Chore>
               updateChoreInState(data.res, 'approved')
             }
           } catch (error) {
             showError({
               title: t('actions.failApproveTitle'),
-              message: error.message || 'Unable to approve chore',
+              message: errorMessage(error) || 'Unable to approve chore',
             })
           }
           break
 
         case 'reject':
           try {
-            const response = await RejectChore(chore.id)
+            const response = (await RejectChore(chore.id)) as Response
             if (response.ok) {
-              const data = await response.json()
+              const data = (await response.json()) as ApiResponse<Chore>
               updateChoreInState(data.res, 'rejected')
             }
           } catch (error) {
             showError({
               title: t('actions.failRejectTitle'),
-              message: error.message || 'Unable to reject chore',
+              message: errorMessage(error) || 'Unable to reject chore',
             })
           }
           break
@@ -443,7 +592,7 @@ export const useChoreActions = ({
             onClose: async isConfirmed => {
               if (isConfirmed === true) {
                 try {
-                  const response = await DeleteChore(chore.id)
+                  const response = (await DeleteChore(chore.id)) as Response
                   if (response.ok) {
                     setChores(chores.filter(c => c.id !== chore.id))
                     queryClient.invalidateQueries({ queryKey: ['chores'] })
@@ -454,7 +603,7 @@ export const useChoreActions = ({
                   }
                 } catch (error) {
                   if (isNetworkError(error)) {
-                    const cmdId = await commandQueue.enqueue(
+                    const cmdId: unknown = await commandQueue.enqueue(
                       CommandType.DELETE_CHORE,
                       chore.id,
                       { id: chore.id },
@@ -477,7 +626,7 @@ export const useChoreActions = ({
                   } else {
                     showError({
                       title: t('actions.failDeleteTitle'),
-                      message: error?.message || 'Unable to delete chore',
+                      message: errorMessage(error) || 'Unable to delete chore',
                     })
                   }
                 }
@@ -489,15 +638,15 @@ export const useChoreActions = ({
 
         case 'archive':
           try {
-            await new Promise((resolve, reject) => {
+            await new Promise<Response | void>((resolve, reject) => {
               archiveChore.mutate(chore.id, {
-                onSuccess: data => {
+                onSuccess: (data: Response) => {
                   updateChoreInState(chore, 'archive')
                   resolve(data)
                 },
                 onError: async error => {
                   if (isNetworkError(error)) {
-                    const cmdId = await commandQueue.enqueue(
+                    const cmdId: unknown = await commandQueue.enqueue(
                       CommandType.ARCHIVE_CHORE,
                       chore.id,
                       { id: chore.id },
@@ -534,20 +683,20 @@ export const useChoreActions = ({
                 },
               })
             })
-          } catch (error) {}
+          } catch {}
           break
 
         case 'unarchive':
           try {
-            await new Promise((resolve, reject) => {
+            await new Promise<Response | void>((resolve, reject) => {
               unarchiveChore.mutate(chore.id, {
-                onSuccess: data => {
+                onSuccess: (data: Response) => {
                   updateChoreInState({ ...chore, isActive: true }, 'unarchive')
                   resolve(data)
                 },
                 onError: async error => {
                   if (isNetworkError(error)) {
-                    const cmdId = await commandQueue.enqueue(
+                    const cmdId: unknown = await commandQueue.enqueue(
                       CommandType.UNARCHIVE_CHORE,
                       chore.id,
                       { id: chore.id },
@@ -582,15 +731,15 @@ export const useChoreActions = ({
                 },
               })
             })
-          } catch (error) {}
+          } catch {}
           break
 
         case 'skip':
           try {
-            const response = await SkipChore(chore.id)
+            const response = (await SkipChore(chore.id)) as Response
             if (response.ok) {
               // Online: update in place (chore gets new due date)
-              const data = await response.json()
+              const data = (await response.json()) as ApiResponse<Chore>
               updateChoreInState(data.res, 'skipped')
             } else {
               refetchChores()
@@ -598,7 +747,7 @@ export const useChoreActions = ({
           } catch (error) {
             if (isNetworkError(error)) {
               // Offline — queue and show pending badge on the chore
-              const cmdId = await commandQueue.enqueue(
+              const cmdId: unknown = await commandQueue.enqueue(
                 CommandType.SKIP_CHORE,
                 chore.id,
                 { id: chore.id },
@@ -616,7 +765,7 @@ export const useChoreActions = ({
             } else {
               showError({
                 title: t('actions.failSkipTitle'),
-                message: error?.message || 'Unable to skip chore',
+                message: errorMessage(error) || 'Unable to skip chore',
               })
             }
           }
@@ -625,7 +774,10 @@ export const useChoreActions = ({
         case 'changeDueDate':
           if (extraData && 'date' in extraData) {
             try {
-              const response = await UpdateDueDate(chore.id, extraData.date)
+              const response = (await UpdateDueDate(
+                chore.id,
+                extraData.date,
+              )) as Response
               if (response.ok) {
                 chore.nextDueDate = extraData.date
                 const eventType =
@@ -643,7 +795,7 @@ export const useChoreActions = ({
             } catch (error) {
               if (isNetworkError(error)) {
                 const oldDueDate = chore.nextDueDate
-                const cmdId = await commandQueue.enqueue(
+                const cmdId: unknown = await commandQueue.enqueue(
                   CommandType.RESCHEDULE_CHORE,
                   chore.id,
                   {
@@ -680,7 +832,7 @@ export const useChoreActions = ({
                     extraData.date === null
                       ? 'Failed to remove due date'
                       : 'Failed to reschedule',
-                  message: error.message || 'Unable to update due date',
+                  message: errorMessage(error) || 'Unable to update due date',
                 })
               }
             }
@@ -691,10 +843,10 @@ export const useChoreActions = ({
 
         case 'moveToProject': {
           const project = extraData?.project
-          const projectId = project?.id === null ? null : project?.id
+          const projectId = project?.id ?? null
           const updatedChore = { ...chore, projectId }
           try {
-            const response = await SaveChore(updatedChore)
+            const response = (await SaveChore(updatedChore)) as Response
             if (response.ok) {
               updateChoreInState(updatedChore, 'moved-to-project')
               showSuccess({
@@ -705,7 +857,7 @@ export const useChoreActions = ({
           } catch (error) {
             showError({
               title: t('actions.failMoveTitle'),
-              message: error?.message || 'Unable to move task to project',
+              message: errorMessage(error) || 'Unable to move task to project',
             })
           }
           break
@@ -714,7 +866,10 @@ export const useChoreActions = ({
         case 'changePriority': {
           const priority = extraData?.priority ?? 0
           try {
-            const response = await UpdateChorePriority(chore.id, priority)
+            const response = (await UpdateChorePriority(
+              chore.id,
+              priority,
+            )) as Response
             if (response.ok) {
               updateChoreInState({ ...chore, priority }, 'priority-changed')
             } else {
@@ -726,7 +881,7 @@ export const useChoreActions = ({
           } catch (error) {
             showError({
               title: t('actions.failPriorityTitle'),
-              message: error?.message || t('actions.failPriorityMessage'),
+              message: errorMessage(error) || t('actions.failPriorityMessage'),
             })
           }
           break
@@ -761,11 +916,14 @@ export const useChoreActions = ({
   )
 
   const handleChangeDueDate = useCallback(
-    async newDate => {
+    async (newDate: string | null) => {
       if (!modalChore) return
       closeModal()
       try {
-        const response = await UpdateDueDate(modalChore.id, newDate)
+        const response = (await UpdateDueDate(
+          modalChore.id,
+          newDate,
+        )) as Response
         if (response.ok) {
           updateChoreInState(
             { ...modalChore, nextDueDate: newDate },
@@ -780,7 +938,7 @@ export const useChoreActions = ({
       } catch (error) {
         if (isNetworkError(error)) {
           const oldDueDate = modalChore.nextDueDate
-          const cmdId = await commandQueue.enqueue(
+          const cmdId: unknown = await commandQueue.enqueue(
             CommandType.RESCHEDULE_CHORE,
             modalChore.id,
             {
@@ -807,7 +965,7 @@ export const useChoreActions = ({
         } else {
           showError({
             title: t('actions.failRescheduleTitle'),
-            message: error.message || 'Unable to update due date',
+            message: errorMessage(error) || 'Unable to update due date',
           })
         }
       }
@@ -823,17 +981,17 @@ export const useChoreActions = ({
   )
 
   const handleCompleteWithPastDate = useCallback(
-    newDate => {
+    (newDate: string) => {
       if (!modalChore) return
       MarkChoreComplete(
         modalChore.id,
         impersonatedUser ? { completedBy: impersonatedUser.userId } : null,
         new Date(newDate).toISOString(),
         null,
-      ).then(response => {
+      ).then((response: Response) => {
         if (response.ok) {
           celebrate()
-          response.json().then(data => {
+          response.json().then((data: ApiResponse<Chore>) => {
             const newChore = data.res
             updateChoreInState(newChore, 'completed')
           })
@@ -850,7 +1008,7 @@ export const useChoreActions = ({
   // first (existing per-chore state, no dedicated endpoint for it) and only
   // then assigns.
   const handleAssigneeChange = useCallback(
-    async assigneeId => {
+    async (assigneeId: number) => {
       if (!modalChore) return
       closeModal()
       try {
@@ -858,23 +1016,26 @@ export const useChoreActions = ({
           a => a.userId === assigneeId,
         )
         if (!isInPool) {
-          const saveResponse = await SaveChore({
+          const saveResponse = (await SaveChore({
             ...modalChore,
             assignees: [
               ...(modalChore.assignees || []),
               { userId: assigneeId },
             ],
-          })
+          })) as Response
           if (!saveResponse.ok) throw new Error(t('actions.failAssignMessage'))
         }
-        const response = await UpdateChoreAssignee(modalChore.id, assigneeId)
+        const response = (await UpdateChoreAssignee(
+          modalChore.id,
+          assigneeId,
+        )) as Response
         if (!response.ok) throw new Error(t('actions.failAssignMessage'))
-        const data = await response.json()
+        const data = (await response.json()) as ApiResponse<Chore>
         updateChoreInState(data.res, 'assigned')
       } catch (error) {
         showError({
           title: t('actions.failAssignTitle'),
-          message: error?.message || t('actions.failAssignMessage'),
+          message: errorMessage(error) || t('actions.failAssignMessage'),
         })
       }
     },
@@ -882,7 +1043,7 @@ export const useChoreActions = ({
   )
 
   const handleCompleteWithNote = useCallback(
-    note => {
+    (note: string) => {
       if (!modalChore) return
       MarkChoreComplete(
         modalChore.id,
@@ -891,10 +1052,10 @@ export const useChoreActions = ({
           : { note },
         null,
         null,
-      ).then(response => {
+      ).then((response: Response) => {
         if (response.ok) {
           celebrate()
-          response.json().then(data => {
+          response.json().then((data: ApiResponse<Chore>) => {
             const newChore = data.res
             updateChoreInState(newChore, 'completed')
           })
@@ -906,14 +1067,14 @@ export const useChoreActions = ({
   )
 
   const handleNudge = useCallback(
-    async ({ choreId, message, notifyAllAssignees }) => {
+    async ({ choreId, message, notifyAllAssignees }: NudgeRequest) => {
       try {
-        const response = await NudgeChore(choreId, {
+        const response = (await NudgeChore(choreId, {
           message,
           notifyAllAssignees,
-        })
+        })) as Response
         if (response.ok) {
-          const data = await response.json()
+          const data = (await response.json()) as { message?: string }
           showSuccess({
             title: t('actions.nudgeSentTitle'),
             message: data.message || 'Nudge sent successfully',
@@ -924,7 +1085,7 @@ export const useChoreActions = ({
       } catch (error) {
         showError({
           title: t('actions.failNudgeTitle'),
-          message: error.message || 'Unable to send nudge at this time',
+          message: errorMessage(error) || 'Unable to send nudge at this time',
         })
       } finally {
         closeModal()
@@ -943,7 +1104,10 @@ export const useChoreActions = ({
   // applied, and the toast says how many of each.
 
   const patchLocalChores = useCallback(
-    (ids, patch) => {
+    (
+      ids: number[],
+      patch: Partial<Chore> | ((chore: Chore) => Partial<Chore>),
+    ) => {
       const idSet = new Set(ids)
       setChores(list =>
         list.map(chore =>
@@ -960,7 +1124,7 @@ export const useChoreActions = ({
   )
 
   const removeLocalChores = useCallback(
-    ids => {
+    (ids: number[]) => {
       const idSet = new Set(ids)
       setChores(list => list.filter(chore => !idSet.has(chore.id)))
     },
@@ -983,18 +1147,18 @@ export const useChoreActions = ({
       // "Completed", "Rescheduled", … — reads as `${verb} 3 tasks.`
       successVerb,
       targets,
-    }) => {
+    }: RunBulkOptions) => {
       if (!targets || targets.length === 0) return
 
       const execute = async () => {
-        const succeeded = []
-        const failed = []
+        const succeeded: Chore[] = []
+        const failed: Chore[] = []
 
         for (const chore of targets) {
           try {
             await perChore(chore)
             succeeded.push(chore)
-          } catch (error) {
+          } catch {
             failed.push(chore)
           }
         }
@@ -1022,7 +1186,7 @@ export const useChoreActions = ({
       if (!confirm) {
         try {
           await execute()
-        } catch (error) {
+        } catch {
           showError({
             title: failedTitle || `Bulk ${failureVerb} failed`,
             message: t('archived.unexpectedError'),
@@ -1040,7 +1204,7 @@ export const useChoreActions = ({
           if (isConfirmed !== true) return
           try {
             await execute()
-          } catch (error) {
+          } catch {
             showError({
               title: failedTitle || `Bulk ${failureVerb} failed`,
               message: t('archived.unexpectedError'),
@@ -1109,7 +1273,7 @@ export const useChoreActions = ({
             title: t('choreView.undoSuccessful'),
             message: `Undo skip for ${taskCount(succeeded.length)}.`,
           })
-        } catch (error) {
+        } catch {
           showError({
             title: t('choreView.undoFailed'),
             message: t('choreView.undoFailedMessage'),
@@ -1162,7 +1326,7 @@ export const useChoreActions = ({
   }, [getSelectedChoresData, chores, runBulk, removeLocalChores])
 
   const handleBulkMoveToProject = useCallback(
-    async project => {
+    async (project: ProjectTarget | null | undefined) => {
       const projectId = project?.id ?? null
       runBulk({
         targets: getSelectedChoresData(chores),
@@ -1186,10 +1350,10 @@ export const useChoreActions = ({
   // "tomorrow 5am", and a task with no specific time stays at anytime. Only a
   // time the user explicitly picked overrides that, for the whole selection.
   const handleBulkDueDate = useCallback(
-    async parts => {
+    async (parts: DueDateParts | null) => {
       const clearing = !parts?.dueDateOnly
 
-      const dueDateFor = chore => {
+      const dueDateFor = (chore: Chore) => {
         if (clearing) return null
         if (parts.useCustomTime && parts.dueTime) {
           return atTimeOfDay(parts.dueDateOnly, parts.dueTime)
@@ -1224,7 +1388,7 @@ export const useChoreActions = ({
   )
 
   const handleBulkAssignee = useCallback(
-    async assigneeId => {
+    async (assigneeId: number) => {
       runBulk({
         targets: getSelectedChoresData(chores),
         perChore: chore => expectOk(UpdateChoreAssignee(chore.id, assigneeId)),
@@ -1242,7 +1406,7 @@ export const useChoreActions = ({
   )
 
   const handleBulkPriority = useCallback(
-    async priority => {
+    async (priority: number) => {
       runBulk({
         targets: getSelectedChoresData(chores),
         perChore: chore => expectOk(UpdateChorePriority(chore.id, priority)),
@@ -1263,10 +1427,10 @@ export const useChoreActions = ({
   // label set, and replacing would silently drop labels the user never saw.
   // There is no per-label endpoint, so this goes through a full chore save.
   const handleBulkLabels = useCallback(
-    async (label, mode) => {
+    async (label: Label | null | undefined, mode: 'add' | 'remove') => {
       if (!label) return
       const selected = getSelectedChoresData(chores)
-      const nextLabelsFor = chore => {
+      const nextLabelsFor = (chore: Chore) => {
         const current = chore.labelsV2 || []
         return mode === 'add'
           ? [...current, label]
