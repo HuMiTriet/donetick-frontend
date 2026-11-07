@@ -2,7 +2,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 
 import { networkManager } from '../hooks/NetworkManager'
-import { CompleteSubTask, SaveChore } from '../utils/Fetcher'
+import { CompleteSubTask, GetChoreByID, SaveChore } from '../utils/Fetcher'
+import { removeEmptySubTasks } from '../utils/SubTasks'
+import { useUpdateChore } from './ChoreQueries'
 
 export const useUpdate = () => {
   const queryClient = useQueryClient()
@@ -75,4 +77,35 @@ export const useCompleteSubTask = () => {
     },
     onSuccess: (data, variables) => {},
   })
+}
+
+export const useSaveSubTasks = () => {
+  const queryClient = useQueryClient()
+  const updateChore = useUpdateChore()
+
+  const mutation = useMutation({
+    mutationFn: async ({ choreId, subTasks }) => {
+      const resp = await GetChoreByID(choreId)
+      if (!resp?.ok) throw new Error('Failed to load chore')
+      const { res: chore } = await resp.json()
+      await updateChore.mutateAsync({
+        ...chore,
+        subTasks: removeEmptySubTasks(subTasks),
+        labelsV2: chore.labelsV2 ?? [],
+        thingTrigger: chore.thingChore ?? null,
+      })
+      await queryClient.invalidateQueries({
+        predicate: query =>
+          ['chores', 'chore', 'choreDetails'].includes(query.queryKey[0]) &&
+          (query.queryKey[0] === 'chores' ||
+            String(query.queryKey[1]) === String(choreId)),
+      })
+    },
+  })
+
+  return {
+    isSaving: mutation.isPending,
+    saveSubTasks: (choreId, subTasks) =>
+      mutation.mutateAsync({ choreId, subTasks }),
+  }
 }

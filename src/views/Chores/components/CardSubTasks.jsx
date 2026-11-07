@@ -4,8 +4,13 @@ import PropTypes from 'prop-types'
 import { useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { useInlineSubTaskEditor } from '../../../hooks/useInlineSubTaskEditor'
 import { useCachedSubTasks } from '../../../queries/SubtaskQueries'
 import SubTasks from '../../components/SubTask'
+import {
+  SubTaskEditButton,
+  SubTaskEditFooter,
+} from '../../components/SubTaskEditControls'
 
 /**
  * Done/total subtask chip for a chore card. With `onToggle` it also expands
@@ -89,6 +94,12 @@ export const CardSubTaskList = ({ choreId, performers, subTasks, sx }) => {
     if (pendingToggles.current === 0) refreshChores()
   }
 
+  const editor = useInlineSubTaskEditor({
+    choreId,
+    subTasks,
+    setSubTasks: setTasks,
+  })
+
   return (
     <Box
       // Taps on the list must not open the chore
@@ -102,14 +113,16 @@ export const CardSubTaskList = ({ choreId, performers, subTasks, sx }) => {
         ...sx,
       }}
     >
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <SubTaskEditButton editor={editor} />
+      </Box>
       <SubTasks
-        editMode={false}
+        {...editor.subTasksProps}
         choreId={choreId}
         performers={performers}
-        tasks={subTasks}
-        setTasks={setTasks}
         onToggleSettled={handleToggleSettled}
       />
+      <SubTaskEditFooter editor={editor} />
     </Box>
   )
 }

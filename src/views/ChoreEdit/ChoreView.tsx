@@ -13,6 +13,7 @@ import {
   PeopleAlt,
   Person,
   PlayArrow,
+  PlaylistAdd,
   SwitchAccessShortcut,
   ThumbDown,
   ThumbUp,
@@ -43,6 +44,10 @@ import EmptyState from '../../components/common/EmptyState'
 import { useImpersonateUser } from '../../contexts/ImpersonateUserContext.jsx'
 import { useLocalization } from '../../contexts/LocalizationContext'
 import { useDescriptionHtml } from '../../hooks/useDescriptionHtml'
+import {
+  type InlineSubTaskEditor,
+  useInlineSubTaskEditor,
+} from '../../hooks/useInlineSubTaskEditor'
 import { usePendingCommands } from '../../hooks/usePendingCommands'
 import {
   useChoreDetails,
@@ -63,7 +68,6 @@ import type {
   ChoreDetail,
   ChoreHistory,
   CircleMember,
-  SubTask,
 } from '../../types/models'
 import { celebrateTask } from '../../utils/Celebrate'
 import {
@@ -100,7 +104,11 @@ import DueDatePickerModal, {
 import LoadingComponent from '../components/Loading.jsx'
 import PendingBadge from '../components/PendingBadge'
 import UntypedRichTextEditor from '../components/RichTextEditor.jsx'
-import SubTasks from '../components/SubTask.jsx'
+import UntypedSubTasks from '../components/SubTask.jsx'
+import {
+  SubTaskEditButton,
+  SubTaskEditFooter,
+} from '../components/SubTaskEditControls'
 import AssigneeModal from '../Modals/Inputs/AssigneeModal'
 import AttachmentBrowserModal from '../Modals/Inputs/AttachmentBrowserModal'
 import ConfirmationModal from '../Modals/Inputs/ConfirmationModal'
@@ -186,6 +194,14 @@ type RichTextEditorProps = {
 const RichTextEditor =
   UntypedRichTextEditor as ComponentType<RichTextEditorProps>
 
+type SubTasksProps = InlineSubTaskEditor['subTasksProps'] & {
+  choreId: number
+  onToggleSettled?: (() => void) | undefined
+  performers: CircleMember[]
+}
+
+const SubTasks = UntypedSubTasks as ComponentType<SubTasksProps>
+
 const TIMER_STATUSES: readonly (number | undefined)[] = [
   ChoreStatus.ACTIVE,
   ChoreStatus.PAUSED,
@@ -262,6 +278,12 @@ const ChoreView = () => {
   const { data: choreHistoryData } = useChoreHistory(choreId)
 
   const { data: pendingCmds } = usePendingCommands(choreId)
+
+  const subTaskEditor = useInlineSubTaskEditor({
+    choreId: Number(choreId),
+    subTasks: removeEmptySubTasks(chore.subTasks) ?? [],
+    setSubTasks: tasks => setChore({ ...chore, subTasks: tasks }),
+  })
 
   const choreHistory =
     (choreHistoryData as ApiResponse<ChoreHistory[]> | undefined)?.res || []
@@ -1325,11 +1347,21 @@ const ChoreView = () => {
             </Sheet>
           </>
         )}
-        {subTasks?.length > 0 && (
+        {subTasks?.length > 0 || subTaskEditor.isEditing ? (
           <Box sx={{ p: 0, m: 0, mb: 2 }}>
-            <Typography level='title-md' sx={{ mb: 1 }}>
-              {t('choreView.subtasksLabel')}
-            </Typography>
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                mb: 1,
+              }}
+            >
+              <Typography level='title-md'>
+                {t('choreView.subtasksLabel')}
+              </Typography>
+              <SubTaskEditButton editor={subTaskEditor} />
+            </Box>
             <Sheet
               variant='plain'
               sx={{
@@ -1340,20 +1372,24 @@ const ChoreView = () => {
               }}
             >
               <SubTasks
-                editMode={false}
+                {...subTaskEditor.subTasksProps}
                 performers={performers}
-                tasks={subTasks}
-                setTasks={(tasks: SubTask[]) => {
-                  setChore({
-                    ...chore,
-                    subTasks: tasks,
-                  })
-                }}
                 choreId={Number(choreId ?? 0)}
                 onToggleSettled={undefined}
               />
             </Sheet>
+            <SubTaskEditFooter editor={subTaskEditor} />
           </Box>
+        ) : (
+          <Button
+            size='sm'
+            variant='plain'
+            startDecorator={<PlaylistAdd />}
+            onClick={subTaskEditor.startEditing}
+            sx={{ mb: 2 }}
+          >
+            {t('subtaskEditor.add')}
+          </Button>
         )}
       </Box>
 

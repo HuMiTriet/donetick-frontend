@@ -13,6 +13,14 @@
   "priority": "Priority",
   "status": "Status",
   "description": "Description",
+  "subtaskEditor": {
+    "edit": "Edit subtasks",
+    "add": "Add subtasks",
+    "save": "Save",
+    "cancel": "Cancel",
+    "saveFailedTitle": "Couldn't save subtasks",
+    "saveFailedMessage": "Your changes are still here. Try again."
+  },
   "choreView": {
     "notFoundTitle": "Task not available",
     "notFoundDescription": "This task may have been deleted or is no longer shared with you.",
