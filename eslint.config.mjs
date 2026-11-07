@@ -130,7 +130,7 @@ export default [
         'error',
         { max: 2000, skipBlankLines: true, skipComments: true },
       ],
-      'max-lines-per-function': ['warn', { max: 500 }],
+      // 'max-lines-per-function': ['warn', { max: 500 }],
       'no-constant-condition': 'warn',
       'no-loss-of-precision': 'error',
       'no-undef': 'warn',

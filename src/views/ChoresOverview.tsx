@@ -24,7 +24,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 
 import type { ApiResponse, Chore, User } from '../types/models'
-import { celebrate } from '../utils/Celebrate'
+import { celebrateTask } from '../utils/Celebrate'
 import { GetAllUsers, GetChores, MarkChoreComplete } from '../utils/Fetcher'
 import DateModal from './Modals/Inputs/DateModal'
 // import moment from 'moment'
@@ -251,7 +251,7 @@ const ChoresOverview = () => {
                       MarkChoreComplete(chore.id, null, null, null).then(
                         response => {
                           if (response.ok) {
-                            celebrate()
+                            celebrateTask(chore)
                             response.json().then((data: ApiResponse<Chore>) => {
                               const newChore = data.res
                               const newChores = [...chores]
@@ -316,11 +316,11 @@ const ChoresOverview = () => {
           MarkChoreComplete(choreId, null, date, activeUserId).then(
             response => {
               if (response.ok) {
-                celebrate()
                 response.json().then((data: ApiResponse<Chore>) => {
                   const newChore = data.res
                   const newChores = [...chores]
                   const index = newChores.findIndex(c => c.id === choreId)
+                  celebrateTask(chores[index])
                   newChores[index] = newChore
                   setChores(newChores)
                   setFilteredChores(newChores)

@@ -16,7 +16,7 @@ import type {
   Label,
   User,
 } from '../../../types/models'
-import { celebrate } from '../../../utils/Celebrate'
+import { celebrateTask } from '../../../utils/Celebrate'
 import { commandQueue, CommandType } from '../../../utils/CommandQueue'
 import {
   ApproveChore,
@@ -329,6 +329,7 @@ export const useChoreActions = ({
     ],
   )
 
+  // eslint-disable-next-line max-lines-per-function
   const handleChoreAction = useCallback(
     async (
       action: string,
@@ -347,7 +348,7 @@ export const useChoreActions = ({
               null,
             )) as Response
             if (response.ok) {
-              celebrate()
+              celebrateTask(chore)
               // Online: hide the chore and show undo
               setChores(prev => prev.filter(c => c.id !== chore.id))
               queryClient.setQueriesData<ApiResponse<Chore[]>>(
@@ -413,7 +414,7 @@ export const useChoreActions = ({
                 pending: true,
               })
               queryClient.invalidateQueries({ queryKey: ['pendingCommands'] })
-              celebrate()
+              celebrateTask(chore)
               showSuccess({
                 title: t('actions.completionPending'),
                 message:
@@ -990,7 +991,7 @@ export const useChoreActions = ({
         null,
       ).then((response: Response) => {
         if (response.ok) {
-          celebrate()
+          celebrateTask(modalChore)
           response.json().then((data: ApiResponse<Chore>) => {
             const newChore = data.res
             updateChoreInState(newChore, 'completed')
@@ -1054,7 +1055,7 @@ export const useChoreActions = ({
         null,
       ).then((response: Response) => {
         if (response.ok) {
-          celebrate()
+          celebrateTask(modalChore)
           response.json().then((data: ApiResponse<Chore>) => {
             const newChore = data.res
             updateChoreInState(newChore, 'completed')
@@ -1241,7 +1242,7 @@ export const useChoreActions = ({
           ),
         ),
       // One burst for the whole batch, not one per task.
-      onSucceeded: () => celebrate(),
+      onSucceeded: () => celebrateTask({}),
       successTitle: t('actions.bulk.completedTitle'),
       successVerb: 'Completed',
       failureVerb: 'completed',

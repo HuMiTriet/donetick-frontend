@@ -65,7 +65,7 @@ import type {
   CircleMember,
   SubTask,
 } from '../../types/models'
-import { celebrate } from '../../utils/Celebrate'
+import { celebrateTask } from '../../utils/Celebrate'
 import {
   ChoreHistoryStatus,
   ChoreStatus,
@@ -380,7 +380,7 @@ const ChoreView = () => {
         null,
       )
       if (resp.ok) {
-        celebrate()
+        celebrateTask(chore)
         const data = await resp.json()
         setNote(null)
         setChore(data.res)
@@ -445,7 +445,7 @@ const ChoreView = () => {
           pending: true,
         })
         queryClient.invalidateQueries({ queryKey: ['pendingCommands'] })
-        celebrate()
+        celebrateTask(chore)
         showSuccess({
           message: t('choreView.offlineComplete'),
           undoAction: async () => {
