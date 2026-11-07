@@ -547,13 +547,19 @@ const SubTasks = ({
         return descendants
       }
       const idsToDelete = [taskId, ...findDescendants(taskId)]
+      const remaining = tasks.filter(task => !idsToDelete.includes(task.id))
+      const topLevelOrder = new Map(
+        remaining
+          .filter(task => task.parentId === null)
+          .sort((a, b) => a.orderId - b.orderId)
+          .map((task, index) => [task.id, index]),
+      )
       setTasks(
-        tasks
-          .filter(task => !idsToDelete.includes(task.id))
-          .map((task, index) => ({
-            ...task,
-            orderId: task.parentId === null ? index : task.orderId,
-          })),
+        remaining.map(task =>
+          topLevelOrder.has(task.id)
+            ? { ...task, orderId: topLevelOrder.get(task.id) }
+            : task,
+        ),
       )
     },
     [tasks, setTasks],
@@ -907,32 +913,35 @@ const SubTasks = ({
     inputRefs.current[id2]?.focus()
   }
 
-  const onDragEnd = event => {
-    const { active, over } = event
+  const onDragEnd = ({ active, over }) => {
     if (!over || active.id === over.id) return
 
     setTasks(items => {
-      const oldIndex = items.findIndex(item => item.id === active.id)
-      const newIndex = items.findIndex(item => item.id === over.id)
-      if (oldIndex === -1 || newIndex === -1) return items
+      const activeItem = items.find(item => item.id === active.id)
+      const overItem = items.find(item => item.id === over.id)
+      if (!activeItem || !overItem) return items
 
-      const activeItem = items[oldIndex]
-      const overItem = items[newIndex]
+      let ancestor = overItem
+      for (let depth = 0; ancestor && depth < items.length; depth++) {
+        if (ancestor.parentId === activeItem.id) return items
+        ancestor = items.find(item => item.id === ancestor.parentId)
+      }
 
-      const reordered = [...items]
-      reordered.splice(oldIndex, 1)
-      reordered.splice(newIndex, 0, activeItem)
-
+      const visible = getVisibleOrder(items, expandedIds)
+      const movingDown = visible.indexOf(activeItem) < visible.indexOf(overItem)
       const parentId = overItem.parentId
-      const siblings = reordered.filter(item => item.parentId === parentId)
+      const siblings = items
+        .filter(item => item.parentId === parentId && item.id !== activeItem.id)
+        .sort((a, b) => a.orderId - b.orderId)
+      const overIndex = siblings.indexOf(overItem)
+      siblings.splice(movingDown ? overIndex + 1 : overIndex, 0, activeItem)
+      const orderById = new Map(siblings.map((item, index) => [item.id, index]))
 
-      return reordered.map(item => {
-        if (item.id === activeItem.id)
-          return { ...item, parentId, orderId: siblings.indexOf(item) }
-        return item.parentId === parentId
-          ? { ...item, orderId: siblings.indexOf(item) }
-          : item
-      })
+      return items.map(item =>
+        orderById.has(item.id)
+          ? { ...item, parentId, orderId: orderById.get(item.id) }
+          : item,
+      )
     })
   }
 
@@ -942,7 +951,10 @@ const SubTasks = ({
       onDragEnd={onDragEnd}
       sensors={sensors}
     >
-      <SortableContext items={tasks} strategy={verticalListSortingStrategy}>
+      <SortableContext
+        items={getVisibleOrder(tasks, expandedIds).map(task => task.id)}
+        strategy={verticalListSortingStrategy}
+      >
         <List
           sx={{
             boxSizing: 'border-box',
