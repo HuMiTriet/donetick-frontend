@@ -49,6 +49,7 @@ import ModalActions from '../../components/common/ModalActions'
 import { useImpersonateUser } from '../../contexts/ImpersonateUserContext'
 import { useLocalization } from '../../contexts/LocalizationContext'
 import { useUserProfile } from '../../queries/UserQueries'
+import { celebrateTask } from '../../utils/Celebrate'
 import { CompleteSubTask } from '../../utils/Fetcher'
 
 // Keep deep trees usable on narrow screens. The hierarchy remains unlimited,
@@ -525,6 +526,7 @@ const SubTasks = ({
     )
       .then(responses => {
         if (responses.some(res => !res?.ok)) console.log('Error updating task')
+        else if (newCompletedAt) celebrateTask({}, true)
       })
       .catch(() => console.log('Error updating task'))
       .finally(() => onToggleSettled?.())

@@ -56,7 +56,7 @@ export const celebrateTask = async (
     const y = pointer ? pointer.y : window.innerHeight / 2
     confetti(
       { x: window.scrollX + x, y: window.scrollY + y },
-      { count: range(confetti_count - 5, confetti_count + 5) },
+      { count: range(confetti_count - 5, confetti_count + 5), spread: 80 },
     )
   } catch {
     // confetti is decoration; never let it break a completion
