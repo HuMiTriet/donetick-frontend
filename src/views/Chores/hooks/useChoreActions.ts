@@ -17,6 +17,7 @@ import type {
   User,
 } from '../../../types/models'
 import { celebrateTask } from '../../../utils/Celebrate'
+import { isChoreLocked } from '../../../utils/Chores'
 import { commandQueue, CommandType } from '../../../utils/CommandQueue'
 import {
   ApproveChore,
@@ -33,6 +34,8 @@ import {
 } from '../../../utils/Fetcher'
 import { offlineDB } from '../../../utils/OfflineDB'
 import { isOfflineFeatureEnabled } from '../../../utils/OfflineFeatureToggle'
+import { serverErrorMessage } from '../../../utils/responseError'
+import { formatStakeAmount } from '../../../utils/stakes'
 
 type ChoreEvent =
   | 'approved'
@@ -76,6 +79,8 @@ type ChoreActionExtraData = {
   date?: string | null
   priority?: number
   project?: ProjectTarget
+  // The user already agreed that skipping charges the Beeminder stake
+  stakeConfirmed?: boolean
 }
 
 type DueDateParts = {
@@ -102,7 +107,7 @@ type BulkConfirm = {
 }
 
 type RunBulkOptions = {
-  buildUndo?: (succeeded: Chore[]) => () => Promise<void>
+  buildUndo?: (succeeded: Chore[]) => (() => Promise<void>) | undefined
   confirm?: BulkConfirm
   failedTitle?: string
   failureVerb: string
@@ -111,6 +116,9 @@ type RunBulkOptions = {
   successTitle: string
   successVerb: string
   targets: Chore[]
+  // The action changes or removes chores, which a locked Beeminder stake
+  // forbids: leave locked chores out and say so.
+  skipLocked?: boolean
 }
 
 type NudgeRequest = {
@@ -158,6 +166,10 @@ const errorMessage = (error: unknown) =>
 
 const plural = (count: number) => (count === 1 ? '' : 's')
 const taskCount = (count: number) => `${count} task${plural(count)}`
+
+// Sum of the Beeminder stakes on these chores, in cents
+const stakedTotal = (chores: Chore[]) =>
+  chores.reduce((sum, chore) => sum + (chore.stake?.amountCents ?? 0), 0)
 
 // "No specific time" is stored as end of day, and it has to be exactly
 // 23:59:59 — that stamp is what ChoreEdit writes and what the task card checks
@@ -233,7 +245,14 @@ export const useChoreActions = ({
         skipped: 'Task skipped',
       }
 
-      if (undoableActions[event]) {
+      // A skipped stake was charged; undoing the skip wouldn't refund it
+      if (event === 'skipped' && updatedChore?.stake) {
+        showSuccess({
+          message: t('stake.skippedCharged', {
+            amount: formatStakeAmount(updatedChore.stake.amountCents),
+          }),
+        })
+      } else if (undoableActions[event]) {
         showSuccess({
           message: undoableActions[event],
           undoAction: async () => {
@@ -328,14 +347,52 @@ export const useChoreActions = ({
       showUndo,
     ],
   )
-
-  // eslint-disable-next-line max-lines-per-function
   const handleChoreAction = useCallback(
     async (
       action: string,
       chore: Chore,
       extraData: ChoreActionExtraData = {},
     ) => {
+      // A Beeminder stake past its edit window locks the chore. The menus
+      // already grey these out; this catches every other way in.
+      if (
+        isChoreLocked(chore) &&
+        [
+          'delete',
+          'archive',
+          'changeDueDate',
+          'changePriority',
+          'moveToProject',
+        ].includes(action)
+      ) {
+        showError({
+          title: t('stake.lockedTitle'),
+          message: t('stake.lockedHint'),
+        })
+        return
+      }
+      // Skipping a staked chore charges it: ask first, then skip for real
+      if (action === 'skip' && chore.stake && !extraData.stakeConfirmed) {
+        setConfirmModelConfig({
+          isOpen: true,
+          title: t('choreView.skipTask'),
+          message: t('stake.skipConfirm', {
+            amount: formatStakeAmount(chore.stake.amountCents),
+          }),
+          confirmText: t('stake.skipAndPay'),
+          cancelText: t('choreView.cancel'),
+          onClose: async isConfirmed => {
+            setConfirmModelConfig({})
+            if (isConfirmed === true) {
+              await handleChoreAction('skip', chore, {
+                ...extraData,
+                stakeConfirmed: true,
+              })
+            }
+          },
+        })
+        return
+      }
       switch (action) {
         case 'complete':
           try {
@@ -601,6 +658,14 @@ export const useChoreActions = ({
                       title: t('archived.deletedTitle'),
                       message: t('actions.deletedMessageLong'),
                     })
+                  } else {
+                    showError({
+                      title: t('actions.failDeleteTitle'),
+                      message: await serverErrorMessage(
+                        response,
+                        'Unable to delete chore',
+                      ),
+                    })
                   }
                 } catch (error) {
                   if (isNetworkError(error)) {
@@ -743,6 +808,14 @@ export const useChoreActions = ({
               const data = (await response.json()) as ApiResponse<Chore>
               updateChoreInState(data.res, 'skipped')
             } else {
+              // e.g. Beeminder couldn't be charged, so the skip didn't happen
+              showError({
+                title: t('actions.failSkipTitle'),
+                message: await serverErrorMessage(
+                  response,
+                  'Unable to skip chore',
+                ),
+              })
               refetchChores()
             }
           } catch (error) {
@@ -1144,12 +1217,27 @@ export const useChoreActions = ({
       failureVerb,
       onSucceeded,
       perChore,
-      successTitle,
+      skipLocked = false,
       // "Completed", "Rescheduled", … — reads as `${verb} 3 tasks.`
+      successTitle,
       successVerb,
-      targets,
+      targets: requestedTargets,
     }: RunBulkOptions) => {
-      if (!targets || targets.length === 0) return
+      if (!requestedTargets || requestedTargets.length === 0) return
+      const targets = skipLocked
+        ? requestedTargets.filter(chore => !isChoreLocked(chore))
+        : requestedTargets
+      const lockedCount = requestedTargets.length - targets.length
+      if (lockedCount > 0) {
+        showError({
+          title: t('stake.lockedBulkTitle'),
+          message: t('stake.lockedBulk', { count: lockedCount }),
+        })
+      }
+      if (targets.length === 0) {
+        clearSelection()
+        return
+      }
 
       const execute = async () => {
         const succeeded: Chore[] = []
@@ -1257,30 +1345,44 @@ export const useChoreActions = ({
       confirm: {
         title: t('actions.bulk.skipTitle'),
         confirmText: t('multiToolbar.skip'),
-        message: `Skip ${taskCount(targets.length)} to next due date?`,
+        message: [
+          `Skip ${taskCount(targets.length)} to next due date?`,
+          stakedTotal(targets) > 0
+            ? t('stake.bulkSkipCharge', {
+                amount: formatStakeAmount(stakedTotal(targets)),
+              })
+            : null,
+        ]
+          .filter(Boolean)
+          .join('\n\n'),
       },
       perChore: chore => expectOk(SkipChore(chore.id)),
       successTitle: t('actions.bulk.skippedTitle'),
       successVerb: 'Skipped',
       failureVerb: 'skipped',
       failedTitle: t('actions.bulk.skipFailedTitle'),
-      buildUndo: succeeded => async () => {
-        try {
-          for (const chore of succeeded) {
-            await UndoChoreAction(chore.id)
-          }
-          queryClient.invalidateQueries({ queryKey: ['chores'] })
-          showUndo({
-            title: t('choreView.undoSuccessful'),
-            message: `Undo skip for ${taskCount(succeeded.length)}.`,
-          })
-        } catch {
-          showError({
-            title: t('choreView.undoFailed'),
-            message: t('choreView.undoFailedMessage'),
-          })
-        }
-      },
+      // A skipped stake was charged and undoing wouldn't refund it, so only
+      // offer undo when nothing staked was skipped
+      buildUndo: succeeded =>
+        succeeded.some(chore => chore.stake)
+          ? undefined
+          : async () => {
+              try {
+                for (const chore of succeeded) {
+                  await UndoChoreAction(chore.id)
+                }
+                queryClient.invalidateQueries({ queryKey: ['chores'] })
+                showUndo({
+                  title: t('choreView.undoSuccessful'),
+                  message: `Undo skip for ${taskCount(succeeded.length)}.`,
+                })
+              } catch {
+                showError({
+                  title: t('choreView.undoFailed'),
+                  message: t('choreView.undoFailedMessage'),
+                })
+              }
+            },
     })
   }, [getSelectedChoresData, chores, runBulk, queryClient, showUndo, showError])
 
@@ -1288,6 +1390,7 @@ export const useChoreActions = ({
     const targets = getSelectedChoresData(chores)
     runBulk({
       targets,
+      skipLocked: true,
       confirm: {
         title: t('actions.bulk.archiveTitle'),
         confirmText: t('actionMenu.archive'),
@@ -1312,6 +1415,7 @@ export const useChoreActions = ({
     const targets = getSelectedChoresData(chores)
     runBulk({
       targets,
+      skipLocked: true,
       confirm: {
         title: t('actions.bulk.deleteTitle'),
         confirmText: t('archived.delete'),
@@ -1331,6 +1435,7 @@ export const useChoreActions = ({
       const projectId = project?.id ?? null
       runBulk({
         targets: getSelectedChoresData(chores),
+        skipLocked: true,
         perChore: chore => expectOk(SaveChore({ ...chore, projectId })),
         successTitle: 'Tasks Moved',
         successVerb: `Moved to ${project?.name || 'Default Project'} —`,
@@ -1372,6 +1477,7 @@ export const useChoreActions = ({
 
       runBulk({
         targets: getSelectedChoresData(chores),
+        skipLocked: true,
         perChore: chore => expectOk(UpdateDueDate(chore.id, dueDateFor(chore))),
         successTitle: clearing ? 'Due Date Removed' : 'Tasks Scheduled',
         successVerb: clearing ? 'Unplanned' : 'Rescheduled',
@@ -1392,6 +1498,7 @@ export const useChoreActions = ({
     async (assigneeId: number) => {
       runBulk({
         targets: getSelectedChoresData(chores),
+        skipLocked: true,
         perChore: chore => expectOk(UpdateChoreAssignee(chore.id, assigneeId)),
         successTitle: 'Tasks Reassigned',
         successVerb: 'Reassigned',
@@ -1410,6 +1517,7 @@ export const useChoreActions = ({
     async (priority: number) => {
       runBulk({
         targets: getSelectedChoresData(chores),
+        skipLocked: true,
         perChore: chore => expectOk(UpdateChorePriority(chore.id, priority)),
         successTitle: 'Priority Updated',
         successVerb: 'Updated priority on',
@@ -1459,6 +1567,7 @@ export const useChoreActions = ({
 
       runBulk({
         targets,
+        skipLocked: true,
         perChore: chore =>
           expectOk(SaveChore({ ...chore, labelsV2: nextLabelsFor(chore) })),
         successTitle: mode === 'add' ? 'Label Added' : 'Label Removed',

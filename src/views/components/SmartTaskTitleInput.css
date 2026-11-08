@@ -4,6 +4,7 @@
   --highlight-repeat-color: #15803d;
   --highlight-label-color: #1d4ed8;
   --highlight-priority-color: #be123c;
+  --highlight-stake-color: #b91c1c;
 }
 
 [data-joy-color-scheme='dark'] {
@@ -11,6 +12,7 @@
   --highlight-repeat-color: #86efac;
   --highlight-label-color: #93c5fd;
   --highlight-priority-color: #f9a8d4;
+  --highlight-stake-color: #fca5a5;
 }
 
 .smart-task-display {
@@ -55,6 +57,12 @@
 
 .highlight-points {
   color: var(--highlight-label-color);
+}
+
+/* Money at stake: bold so it reads as a commitment, not a detail */
+.highlight-stake {
+  color: var(--highlight-stake-color);
+  font-weight: 700;
 }
 
 /* Played once when a token is first detected: the dashed underline fades in

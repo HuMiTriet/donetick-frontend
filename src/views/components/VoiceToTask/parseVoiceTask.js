@@ -6,11 +6,12 @@ import { isPlusAccount } from '../../../utils/Helpers'
 import { generateUUID } from '../../../utils/UUID'
 import {
   parseAssignees,
-  parseDueDate,
+  parseDueDateAroundStake,
   parseFrequency,
   parseLabels,
   parsePoints,
   parsePriority,
+  parseStake,
 } from '../CustomParsers'
 
 // Pure equivalent of AddTaskModal.processText — parses one sentence into a
@@ -36,9 +37,11 @@ const resolveHighlights = ({
   points,
   priority,
   repeat,
+  stake,
 }) => {
   const all = []
   repeat?.forEach(h => all.push({ ...h, type: 'repeat', rank: 60 }))
+  stake?.forEach(h => all.push({ ...h, type: 'stake', rank: 55 }))
   priority?.forEach(h => all.push({ ...h, type: 'priority', rank: 50 }))
   points?.forEach(h => all.push({ ...h, type: 'points', rank: 45 }))
   assignees?.forEach(h => all.push({ ...h, type: 'assignee', rank: 40 }))
@@ -63,7 +66,12 @@ const resolveHighlights = ({
 
 export const parseVoiceTask = (
   sentence,
-  { currentUserId = null, members = [], userLabels = [] } = {},
+  {
+    canStake = false,
+    currentUserId = null,
+    members = [],
+    userLabels = [],
+  } = {},
 ) => {
   const assigneesForParsing = mapMembersForParsing(members)
 
@@ -72,7 +80,13 @@ export const parseVoiceTask = (
   const labels = parseLabels(sentence, userLabels)
   const assigneesResult = parseAssignees(sentence, assigneesForParsing)
   const repeat = parseFrequency(sentence)
-  const dueDateParsed = parseDueDate(sentence, chrono)
+  const dueDateParsed = parseDueDateAroundStake(sentence, chrono)
+  // Same rule as AddTaskModal: `$5` is a stake only with a due date and a
+  // linked Beeminder account
+  const stakeParsed = parseStake(sentence)
+  const stakeApplies = Boolean(
+    stakeParsed.result && canStake && (dueDateParsed.result || repeat.dueDate),
+  )
 
   // Sequential cleanup — identical chain to AddTaskModal.processText
   let cleaned = sentence
@@ -94,7 +108,11 @@ export const parseVoiceTask = (
     if (reparse.result) cleaned = reparse.cleanedSentence
   }
   if (dueDateParsed.result) {
-    const reparse = parseDueDate(cleaned, chrono)
+    const reparse = parseDueDateAroundStake(cleaned, chrono)
+    if (reparse.result) cleaned = reparse.cleanedSentence
+  }
+  if (stakeApplies) {
+    const reparse = parseStake(cleaned)
     if (reparse.result) cleaned = reparse.cleanedSentence
   }
 
@@ -131,6 +149,7 @@ export const parseVoiceTask = (
     frequency: repeat.result,
     frequencyName: repeat.name,
     dueDate,
+    stakeCents: stakeApplies ? stakeParsed.result : null,
     highlights: resolveHighlights({
       repeat: repeat.highlight,
       priority: priority.highlight,
@@ -138,6 +157,7 @@ export const parseVoiceTask = (
       assignees: assigneesResult.highlight,
       labels: labels.highlight,
       dueDate: dueDateParsed.result ? dueDateParsed.highlight[0] : null,
+      stake: stakeApplies ? stakeParsed.highlight : null,
     }),
   }
 }
@@ -206,6 +226,10 @@ export const buildChorePayload = (
   }
   if (!parsed.frequency && parsed.dueDate) {
     chore.nextDueDate = new Date(parsed.dueDate).toISOString()
+  }
+  // The server only accepts a stake on a task with a due date
+  if (parsed.stakeCents && chore.nextDueDate) {
+    chore.stake = { amountCents: parsed.stakeCents }
   }
   if (hasReminders && (parsed.frequency || parsed.dueDate)) {
     chore.notification = true

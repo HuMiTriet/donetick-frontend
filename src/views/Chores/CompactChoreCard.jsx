@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next'
 import { useImpersonateUser } from '../../contexts/ImpersonateUserContext.jsx'
 import { useLocalization } from '../../contexts/LocalizationContext'
 import { usePendingCommands } from '../../hooks/usePendingCommands'
+import { useStakeTick } from '../../hooks/useStakeTick'
 import { useCircleMembers, useUserProfile } from '../../queries/UserQueries.jsx'
 import {
   getDueDateChipColor,
@@ -35,11 +36,13 @@ import {
   splitTextAtFirstHttpUrl,
 } from '../../utils/ExternalLinks.js'
 import { stripHtml } from '../../utils/Helpers.jsx'
+import { STAKE_LEVEL_COLOR } from '../../utils/stakes'
 import { removeEmptySubTasks } from '../../utils/SubTasks'
 import ChoreActionMenu, {
   ChoreActionMenuTrigger,
 } from '../components/ChoreActionMenu'
 import PendingBadge from '../components/PendingBadge'
+import StakeBadge from '../components/StakeBadge'
 import { CardSubTaskList, SubTaskCountChip } from './components/CardSubTasks'
 
 // Hoisted so emotion isn't re-serializing an identical object for every row
@@ -82,6 +85,11 @@ const CompactChoreCard = ({
   const { timeFormat } = useLocalization()
   const { data: circleMembersData } = useCircleMembers()
   const { data: pendingCmds } = usePendingCommands(chore.id)
+  // Money at stake turns the priority stripe into a wider stake-coloured one,
+  // and tints the row once the deadline is a day or less away
+  const stakeState = useStakeTick(chore)
+  const stakeColor = stakeState ? STAKE_LEVEL_COLOR[stakeState.level] : null
+  const stakeTint = stakeState && stakeState.level !== 'staked'
 
   const { impersonatedUser } = useImpersonateUser()
 
@@ -185,14 +193,16 @@ const CompactChoreCard = ({
         pl: showLeadingSlot ? '8px' : '14px',
         // pr: '14px',
         py: '4px',
-        bgcolor: 'background.body',
+        bgcolor: stakeTint ? `${stakeColor}.softBg` : 'background.body',
         borderBottom: showDivider === false ? 'none' : '1px solid',
         borderColor: 'divider',
         ...(showDivider === undefined && {
           '&:last-child': { borderBottom: 'none' },
         }),
         '&:hover': {
-          bgcolor: 'background.level1',
+          bgcolor: stakeTint
+            ? `${stakeColor}.softHoverBg`
+            : 'background.level1',
           boxShadow: 'sm',
         },
         '&::before': {
@@ -201,8 +211,10 @@ const CompactChoreCard = ({
           left: 0,
           top: 0,
           bottom: 0,
-          width: '3px',
-          backgroundColor: getPriorityColor(chore.priority),
+          width: stakeColor ? '5px' : '3px',
+          backgroundColor: stakeColor
+            ? `var(--joy-palette-${stakeColor}-500)`
+            : getPriorityColor(chore.priority),
           borderRadius: '16px',
         },
       }}
@@ -488,6 +500,12 @@ const CompactChoreCard = ({
           </Typography>
           {(chore._pending || (pendingCmds && pendingCmds.length > 0)) && (
             <PendingBadge commands={pendingCmds} size='xs' sx={{ mr: -0.5 }} />
+          )}
+          {stakeState && (
+            <StakeBadge
+              state={stakeState}
+              sx={{ fontSize: 11, minHeight: 20, flexShrink: 0 }}
+            />
           )}
           {/* Due Date - Inline with name */}
           {chore.nextDueDate && (

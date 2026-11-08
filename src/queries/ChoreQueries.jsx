@@ -447,11 +447,21 @@ export const useChore = choreId => {
   })
 }
 
+// ArchiveChore resolves on any HTTP status; a refusal (such as 423 for a
+// chore locked by a Beeminder stake) must not count as archived
+const archiveOrThrow = async choreId => {
+  const response = await ArchiveChore(choreId)
+  if (response && !response.ok) {
+    throw await errorFromResponse(response, 'Unable to archive the task')
+  }
+  return response
+}
+
 export const useArchiveChore = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ArchiveChore,
+    mutationFn: archiveOrThrow,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['chores'] })
     },

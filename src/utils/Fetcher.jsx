@@ -811,8 +811,10 @@ const RevokeCalendarURL = () => {
   })
 }
 
-const GetBeeminderAccount = () => {
-  return Fetch(`/beeminder/account`, {
+// live asks the server to look up the Beeminder username behind the token,
+// which costs a call to Beeminder; without it the username comes back null.
+const GetBeeminderAccount = ({ live = false } = {}) => {
+  return Fetch(`/beeminder/account${live ? '?live=true' : ''}`, {
     method: 'GET',
     headers: HEADERS(),
   })
@@ -823,6 +825,14 @@ const SaveBeeminderAccount = authToken => {
     method: 'PUT',
     headers: HEADERS(),
     body: JSON.stringify({ authToken }),
+  })
+}
+
+const SaveBeeminderSettings = ({ defaultLabelId, dryRun }) => {
+  return Fetch(`/beeminder/account/settings`, {
+    method: 'PUT',
+    headers: HEADERS(),
+    body: JSON.stringify({ dryRun, defaultLabelId }),
   })
 }
 
@@ -1242,6 +1252,7 @@ export {
   RotateBridgeCredential,
   RotateCalendarURL,
   SaveBeeminderAccount,
+  SaveBeeminderSettings,
   SaveChore,
   SaveThing,
   SetupMFA,

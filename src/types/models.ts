@@ -1,3 +1,5 @@
+import type { ChoreStake } from '../utils/stakes'
+
 export type ApiResponse<T> = {
   res: T
 }
@@ -134,6 +136,8 @@ export type Chore = {
   syncVersion: number
   attachments?: StorageFile[]
   completionActions: CompletionAction[]
+  // Beeminder stake; absent when the chore has none
+  stake?: ChoreStake | null
 }
 
 export type ChoreDetail = {
@@ -160,6 +164,7 @@ export type ChoreDetail = {
   isActive: boolean
   syncVersion: number
   attachments?: StorageFile[]
+  stake?: ChoreStake | null
 }
 
 export type ChoreHistory = {

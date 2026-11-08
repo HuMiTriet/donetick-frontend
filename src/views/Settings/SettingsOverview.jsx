@@ -25,6 +25,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 
 import { SETTINGS_SECTIONS } from '../../constants/settingsSections'
+import { useResource } from '../../queries/ResourceQueries'
 import { useUserProfile } from '../../queries/UserQueries'
 import { isCloudInstance } from '../../service/FeedbackService'
 import { isPlusAccount } from '../../utils/Helpers'
@@ -41,21 +42,26 @@ const SettingsOverview = () => {
   // Bridge is a relay for self-hosted instances; donetick.com users have no
   // use for it since their server already has direct push access.
   const [isCloud, setIsCloud] = useState(false)
+  // Beeminder stakes are a server option; hide their settings when it's off
+  const { data: resource } = useResource()
+  const beeminderEnabled = Boolean(resource?.beeminder_enabled)
 
   useEffect(() => {
     isCloudInstance().then(setIsCloud)
   }, [])
 
   const settingsCards = [
-    ...SETTINGS_SECTIONS.filter(({ id }) => id !== 'bridge' || !isCloud).map(
-      ({ icon: Icon, id, isBeta }) => ({
-        id,
-        title: t(`overview.sections.${id}.title`),
-        description: t(`overview.sections.${id}.description`),
-        icon: <Icon />,
-        isBeta,
-      }),
-    ),
+    ...SETTINGS_SECTIONS.filter(
+      ({ id }) =>
+        (id !== 'bridge' || !isCloud) &&
+        (id !== 'beeminder' || beeminderEnabled),
+    ).map(({ icon: Icon, id, isBeta }) => ({
+      id,
+      title: t(`overview.sections.${id}.title`),
+      description: t(`overview.sections.${id}.description`),
+      icon: <Icon />,
+      isBeta,
+    })),
     {
       id: 'feedback',
       title: t('overview.sections.feedback.title'),

@@ -29,6 +29,7 @@ import { useTranslation } from 'react-i18next'
 import { useImpersonateUser } from '../../contexts/ImpersonateUserContext.jsx'
 import { useLocalization } from '../../contexts/LocalizationContext'
 import { usePendingCommands } from '../../hooks/usePendingCommands'
+import { useStakeTick } from '../../hooks/useStakeTick'
 import { useUserProfile } from '../../queries/UserQueries.jsx'
 import {
   getDueDateChipColor,
@@ -45,11 +46,13 @@ import {
 } from '../../utils/ExternalLinks.js'
 import { stripHtml } from '../../utils/Helpers.jsx'
 import Priorities from '../../utils/Priorities'
+import { stakeAccentSx } from '../../utils/stakeStyles'
 import { removeEmptySubTasks } from '../../utils/SubTasks'
 import ChoreActionMenu, {
   ChoreActionMenuTrigger,
 } from '../components/ChoreActionMenu'
 import PendingBadge from '../components/PendingBadge'
+import StakeBadge from '../components/StakeBadge'
 import { CardSubTaskList, SubTaskCountChip } from './components/CardSubTasks'
 
 // Hoisted so emotion isn't re-serializing an identical object for every row
@@ -84,6 +87,7 @@ const ChoreCard = ({
   const { data: userProfile } = useUserProfile({ enabled: !viewOnly })
   const { timeFormat } = useLocalization()
   const { data: pendingCmds } = usePendingCommands(chore.id)
+  const stakeState = useStakeTick(chore)
 
   const { impersonatedUser } = useImpersonateUser()
 
@@ -221,6 +225,8 @@ const ChoreCard = ({
               boxShadow: 'md',
               borderColor: isMultiSelectMode ? 'primary.500' : 'primary.300',
             },
+            // Money at stake: coloured border and tint, pulsing near the end
+            ...stakeAccentSx(stakeState),
             // Add padding when in multi-select mode to account for checkbox
             pl: isMultiSelectMode ? 6 : 2,
             // Visual feedback when selected
@@ -351,6 +357,17 @@ const ChoreCard = ({
                     </Box>
                   )}
                   <Box key={`${chore.id}-labels`}>
+                    {stakeState && (
+                      <StakeBadge
+                        state={stakeState}
+                        sx={{
+                          position: 'relative',
+                          mr: 0.5,
+                          top: 2,
+                          zIndex: 1,
+                        }}
+                      />
+                    )}
                     {chore.priority > 0 && (
                       <Chip
                         sx={{

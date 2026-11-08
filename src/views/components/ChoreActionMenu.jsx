@@ -8,6 +8,7 @@ import {
   DriveFileMove,
   Edit,
   Flag,
+  Lock,
   ManageSearch,
   MoreTime,
   MoreVert,
@@ -44,11 +45,13 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 
 import AppModal from '../../components/common/AppModal'
+import { isChoreLocked, STAKE_LOCKED_ACTIONS } from '../../utils/Chores'
 import LABEL_COLORS, {
   getTextColorFromBackgroundColor,
 } from '../../utils/Colors'
 import Priorities from '../../utils/Priorities'
 import { getIconComponent } from '../../utils/ProjectIcons'
+import { formatStakeAmount } from '../../utils/stakes'
 import { useProjects } from '../Projects/ProjectQueries'
 import { ProjectAccessIcon } from '../Projects/ProjectVisibilityField'
 
@@ -104,6 +107,9 @@ const collapseDividers = items =>
 const ChoreActionMenu = ({
   anchorEl: controlledAnchorEl,
   chore,
+  // Action keys shown greyed out. Defaults to what a locked Beeminder stake
+  // blocks, when the chore has one.
+  disabledActions,
   hiddenActions = [],
   onAction,
   onChangeDueDate,
@@ -362,6 +368,11 @@ const ChoreActionMenu = ({
   // actions next, organization and utilities after that, and destructive
   // actions at the bottom. The same model is used by the desktop menu and the
   // mobile action sheet.
+  const lockedKeys = (
+    disabledActions ?? (isChoreLocked(chore) ? STAKE_LOCKED_ACTIONS : [])
+  ).filter(key => key !== 'archive' || chore?.isActive !== false) // unarchiving stays allowed
+  const lockedHint = t('stake.lockedMenuHint')
+
   const actionItems = [
     {
       key: 'view',
@@ -399,6 +410,12 @@ const ChoreActionMenu = ({
       icon: <SwitchAccessShortcut />,
       label: t('actionMenu.skipToNext'),
       onClick: handleSkip,
+      // Skipping a staked chore charges it; say so before the click
+      endDecorator: chore?.stake?.amountCents ? (
+        <Typography level='body-xs' color='danger' fontWeight='lg'>
+          −{formatStakeAmount(chore.stake.amountCents)}
+        </Typography>
+      ) : undefined,
     },
     { key: 'divider-task-actions', type: 'divider' },
     {
@@ -478,16 +495,43 @@ const ChoreActionMenu = ({
   ]
     .filter(Boolean)
     .filter(item => !hiddenActions.includes(item.key))
+    .map(item =>
+      lockedKeys.includes(item.key)
+        ? {
+            ...item,
+            disabled: true,
+            submenu: undefined,
+            endDecorator: <Lock fontSize='small' />,
+          }
+        : item,
+    )
 
   const visibleActionItems = collapseDividers(actionItems)
 
-  const renderMenuActionItems = () =>
-    visibleActionItems.map(item => {
+  // One line above the items explaining the greyed-out ones
+  const lockedBanner =
+    lockedKeys.length > 0 ? (
+      <Typography
+        key='stake-locked'
+        level='body-xs'
+        color='danger'
+        startDecorator={<Lock sx={{ fontSize: 14 }} />}
+        sx={{ px: 1.5, py: 0.75, maxWidth: 260 }}
+      >
+        {lockedHint}
+      </Typography>
+    ) : null
+
+  const renderMenuActionItems = () => [
+    lockedBanner,
+    ...visibleActionItems.map(item => {
       if (item.type === 'divider') return <Divider key={item.key} />
       return (
         <MenuItem
           key={item.key}
           color={item.color}
+          disabled={item.disabled}
+          title={item.disabled ? lockedHint : undefined}
           onMouseEnter={event => {
             if (item.submenu) {
               openPicker(item.submenu, event.currentTarget)
@@ -516,15 +560,18 @@ const ChoreActionMenu = ({
           )}
         </MenuItem>
       )
-    })
+    }),
+  ]
 
-  const renderModalActionItems = () =>
-    visibleActionItems.map(item => {
+  const renderModalActionItems = () => [
+    lockedBanner,
+    ...visibleActionItems.map(item => {
       if (item.type === 'divider') return <Divider key={item.key} />
       return (
         <ListItem key={item.key}>
           <ListItemButton
             color={item.color}
+            disabled={item.disabled}
             onClick={event => item.onClick(event.currentTarget)}
           >
             <ListItemDecorator>{item.icon}</ListItemDecorator>
@@ -533,7 +580,8 @@ const ChoreActionMenu = ({
           </ListItemButton>
         </ListItem>
       )
-    })
+    }),
+  ]
 
   const renderModalSchedulePicker = () =>
     scheduleOptions.map(option =>

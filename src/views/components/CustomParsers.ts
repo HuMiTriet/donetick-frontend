@@ -245,32 +245,6 @@ export const parsePriority = (inputSentence: string): PriorityParseOutcome => {
   }
 }
 
-// export const parseTrigger = <T extends { name: string }>(
-//   inputSentence: string,
-//   trigger: RegExp,
-//   items: T[],
-// ): ParseOutcome<T[]> => {
-//   const curTrigger: T[] = []
-//   const allHighlights: Highlight[] = []
-//
-//   const sortedTriggers = [...items].sort(
-//     (a, b) => b.name.length - a.name.length,
-//   )
-//
-//   const lcSentence = inputSentence.toLowerCase()
-//   let match: RegExpExecArray | null
-//   while ((match = trigger.exec(lcSentence)) !== null) {
-//     const startIdx = match.index
-//     const rest = lcSentence.slice(startIdx + 1)
-//   }
-//
-//   return {
-//     result: curTrigger,
-//     highlight: allHighlights,
-//     cleanedSentence: inputSentence,
-//   }
-// }
-
 export const parseLabels = <T extends { name: string }>(
   inputSentence: string,
   userLabels: T[],
@@ -834,6 +808,58 @@ export const parsePoints = (inputSentence: string): ParseOutcome<number> => {
   }
 }
 
+// Smallest stake Beeminder will charge, in cents ($1.00).
+export const MIN_STAKE_CENTS = 100
+
+// `$5` or `$5.50`: a dollar sign, up to six whole dollars, optionally a
+// decimal point and one or two cent digits, standing on its own as a word.
+const STAKE_PATTERN = /(^|\s)\$(\d{1,6}(?:\.\d{1,2})?)(?=\s|$)/
+
+const matchStakeToken = (
+  sentence: string,
+): { start: number; end: number; cents: number } | null => {
+  const match = STAKE_PATTERN.exec(sentence)
+  if (!match) return null
+  const [whole, leading, amount] = match
+  const [dollars, cents = ''] = amount.split('.')
+  return {
+    start: match.index + leading.length,
+    end: match.index + whole.length,
+    cents: parseInt(dollars, 10) * 100 + parseInt(cents.padEnd(2, '0'), 10),
+  }
+}
+
+// parseStake finds a Beeminder stake amount such as `$5` or `$5.50` and
+// returns it in cents. Amounts below Beeminder's $1.00 minimum are ignored.
+// The caller decides whether the stake applies (it needs a due date).
+export const parseStake = (inputSentence: string): ParseOutcome<number> => {
+  const token = matchStakeToken(inputSentence)
+  if (!token || token.cents < MIN_STAKE_CENTS) {
+    return { result: null, highlight: [], cleanedSentence: inputSentence }
+  }
+  const { end, start } = token
+  return {
+    result: token.cents,
+    highlight: [{ text: inputSentence.slice(start, end), start, end }],
+    cleanedSentence: (inputSentence.slice(0, start) + inputSentence.slice(end))
+      .replace(/\s+/g, ' ')
+      .trim(),
+  }
+}
+
+// maskRange overwrites sentence[start:end] with `fill`, keeping the length, so
+// another parser can't read that text while character positions stay put.
+export const maskRange = (
+  sentence: string,
+  start: number,
+  end: number,
+  fill = ' ',
+): string =>
+  sentence.slice(0, start) + fill.repeat(end - start) + sentence.slice(end)
+
+// A private-use character no parser reads as a letter, digit or date.
+const STAKE_PLACEHOLDER = '\uE000'
+
 export const parseDueDate = (
   inputSentence: string,
   chrono: Pick<Chrono, 'parse'>,
@@ -933,5 +959,28 @@ export const parseDueDate = (
       },
     ],
     cleanedSentence: cleanedSentence,
+  }
+}
+
+// parseDueDateAroundStake is parseDueDate with any `$amount` token hidden, so
+// chrono can't read `$5.50 friday` as Friday at 5:50. Highlight positions
+// refer to the original sentence, and the token is put back into
+// cleanedSentence (the caller removes it if the stake applies).
+export const parseDueDateAroundStake = (
+  inputSentence: string,
+  chrono: Pick<Chrono, 'parse'>,
+): ParseOutcome<Date> => {
+  const token = matchStakeToken(inputSentence)
+  if (!token) return parseDueDate(inputSentence, chrono)
+  const { end, start } = token
+  const original = inputSentence.slice(start, end)
+  const placeholder = STAKE_PLACEHOLDER.repeat(original.length)
+  const outcome = parseDueDate(
+    maskRange(inputSentence, start, end, STAKE_PLACEHOLDER),
+    chrono,
+  )
+  return {
+    ...outcome,
+    cleanedSentence: outcome.cleanedSentence.replace(placeholder, original),
   }
 }

@@ -23,6 +23,7 @@ import { useModalShortcutScope } from '../../contexts/KeyboardShortcutScopeConte
 import { useDocumentScanner } from '../../hooks/useDocumentScanner'
 import { useFileUpload } from '../../hooks/useFileUpload'
 import { useResponsiveModal } from '../../hooks/useResponsiveModal'
+import { useBeeminderAccount } from '../../queries/BeeminderQueries'
 import { useCreateChore } from '../../queries/ChoreQueries'
 import { useCircleMembers, useUserProfile } from '../../queries/UserQueries'
 import { localAIService } from '../../service/LocalAIService'
@@ -48,11 +49,12 @@ import AssigneePickerField from './AssigneePickerField'
 import AttachmentPickerField from './AttachmentPickerField'
 import {
   parseAssignees,
-  parseDueDate,
+  parseDueDateAroundStake,
   parseFrequency,
   parseLabels,
   parsePoints,
   parsePriority,
+  parseStake,
 } from './CustomParsers'
 import DueDatePickerField from './DueDatePickerField'
 import { combineDueDate } from './DueDatePickerModal'
@@ -63,6 +65,7 @@ import RepeatPickerField from './RepeatPickerField'
 import RichTextEditor from './RichTextEditor'
 import ScanPanel from './ScanToTask/ScanPanel'
 import SmartTaskTitleInput from './SmartTaskTitleInput'
+import StakePickerField from './StakePickerField'
 import SubTasks from './SubTask'
 import { buildChorePayload, parseVoiceTask } from './VoiceToTask/parseVoiceTask'
 import VoicePanel from './VoiceToTask/VoicePanel'
@@ -268,6 +271,9 @@ const TaskInput = ({ initialMode, isModalOpen, onChoreUpdate, onClose }) => {
   // reparse without mentions only resets what a mention set — never a
   // selection made directly in the assignee picker
   const assigneesFromMentionRef = useRef(false)
+  // Same idea for a stake typed as `$5`: only a text-set stake is cleared
+  // when the token goes away, never one set with the stake button
+  const stakeFromTextRef = useRef(false)
   // Pending debounced parse of the smart input text, if any
   const parseTimerRef = useRef(null)
   // Identities (type + text) of the highlights from the previous parse, so
@@ -290,6 +296,8 @@ const TaskInput = ({ initialMode, isModalOpen, onChoreUpdate, onClose }) => {
   }))
   const [subTasks, setSubTasks] = useState(null)
   const [points, setPoints] = useState(-1)
+  // Beeminder stake in cents, or null
+  const [stakeCents, setStakeCents] = useState(null)
   const [isAnyoneTask, setIsAnyoneTask] = useState(false)
   const [hasDescription, setHasDescription] = useState(false)
   const [hasSubTasks, setHasSubTasks] = useState(false)
@@ -311,6 +319,18 @@ const TaskInput = ({ initialMode, isModalOpen, onChoreUpdate, onClose }) => {
     const combined = combineDueDate({ dueDateOnly, dueTime, useCustomTime })
     return combined ? moment(combined).format('YYYY-MM-DDTHH:mm:ss') : null
   }, [dueDateOnly, dueTime, useCustomTime])
+  // A stake needs a linked Beeminder account and a due date ("always" tasks
+  // have none). Without them the stake button is greyed out and `$5` in the
+  // text stays plain text.
+  const { account: beeminderAccount, enabled: beeminderEnabled } =
+    useBeeminderAccount()
+  const canStake = Boolean(beeminderAccount)
+  const hasDueDateForStake =
+    Boolean(dueDate) && frequency?.frequencyType !== 'always'
+  // Read by processText, which is memoized and mustn't re-run on every
+  // due date change (that would let text dates override the picker)
+  const stakeGateRef = useRef({ canStake, hasDueDateForStake })
+  stakeGateRef.current = { canStake, hasDueDateForStake }
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
   const [projectId, setProjectId] = useState(getInitialProject)
   const selectedProject = useMemo(
@@ -532,6 +552,7 @@ const TaskInput = ({ initialMode, isModalOpen, onChoreUpdate, onClose }) => {
       dueDateHighlight,
       pointsHighlight,
       assigneesHighlight,
+      stakeHighlight,
     ) => {
       const parts = []
       let lastIndex = 0
@@ -547,6 +568,11 @@ const TaskInput = ({ initialMode, isModalOpen, onChoreUpdate, onClose }) => {
       if (priorityHighlight) {
         priorityHighlight.forEach(h =>
           allHighlights.push({ ...h, type: 'priority', priority: 50 }),
+        )
+      }
+      if (stakeHighlight) {
+        stakeHighlight.forEach(h =>
+          allHighlights.push({ ...h, type: 'stake', priority: 55 }),
         )
       }
       if (pointsHighlight) {
@@ -606,6 +632,9 @@ const TaskInput = ({ initialMode, isModalOpen, onChoreUpdate, onClose }) => {
             break
           case 'points':
             className = 'highlight-points'
+            break
+          case 'stake':
+            className = 'highlight-stake'
             break
           case 'assignee':
             className = 'highlight-assignee'
@@ -683,7 +712,26 @@ const TaskInput = ({ initialMode, isModalOpen, onChoreUpdate, onClose }) => {
 
       const assigneesResult = parseAssignees(sentence, assigneesForParsing)
       const repeat = parseFrequency(sentence)
-      const dueDateParsed = parseDueDate(sentence, chrono)
+      // Hides any `$amount` from chrono, so `$5.50 friday` isn't 5:50 Friday
+      const dueDateParsed = parseDueDateAroundStake(sentence, chrono)
+      const stakeParsed = parseStake(sentence)
+      // `$5` only counts as a stake when the task will have a due date, from
+      // this text or the picker, and a Beeminder account is linked
+      const stakeGate = stakeGateRef.current
+      const stakeApplies = Boolean(
+        stakeParsed.result &&
+        stakeGate.canStake &&
+        (dueDateParsed.result ||
+          repeat.dueDate ||
+          stakeGate.hasDueDateForStake),
+      )
+      if (stakeApplies) {
+        setStakeCents(stakeParsed.result)
+        stakeFromTextRef.current = true
+      } else if (stakeFromTextRef.current) {
+        stakeFromTextRef.current = false
+        setStakeCents(null)
+      }
 
       // Set all the parsed values
       if (priority.result) setPriority(parseInt(priority.result, 10))
@@ -778,9 +826,13 @@ const TaskInput = ({ initialMode, isModalOpen, onChoreUpdate, onClose }) => {
         const dueDateReparse =
           cleanedSentence === sentence
             ? dueDateParsed
-            : parseDueDate(cleanedSentence, chrono)
+            : parseDueDateAroundStake(cleanedSentence, chrono)
         if (dueDateReparse.result)
           cleanedSentence = dueDateReparse.cleanedSentence
+      }
+      if (stakeApplies) {
+        const stakeReparse = parseStake(cleanedSentence)
+        if (stakeReparse.result) cleanedSentence = stakeReparse.cleanedSentence
       }
 
       setTaskText(sentence)
@@ -795,6 +847,7 @@ const TaskInput = ({ initialMode, isModalOpen, onChoreUpdate, onClose }) => {
         dueDateHighlight,
         pointsParsed.highlight,
         assigneesResult.highlight,
+        stakeApplies ? stakeParsed.highlight : null,
       )
 
       setRenderedParts({ text: sentence, parts })
@@ -857,6 +910,21 @@ const TaskInput = ({ initialMode, isModalOpen, onChoreUpdate, onClose }) => {
     userProfile,
     processText,
   ])
+
+  // When the due date or the Beeminder link comes or goes, a stake can
+  // become possible or impossible. Drop a stake that lost its due date, and
+  // re-read any `$amount` in the text under the new rule.
+  const hasStakeToken = /\$\d/.test(taskText)
+  useEffect(() => {
+    if (!isModalOpen) return
+    if (!hasDueDateForStake || !canStake) {
+      stakeFromTextRef.current = false
+      setStakeCents(null)
+    }
+    if (hasStakeToken) processText(taskText)
+    // Only on gate changes: typing is handled by the debounced parse above
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasDueDateForStake, canStake])
 
   const handleDueDateChange = e => {
     setDueDateOnly(e.target.value || null)
@@ -991,6 +1059,7 @@ const TaskInput = ({ initialMode, isModalOpen, onChoreUpdate, onClose }) => {
         userLabels: voiceLabels,
         members: voiceMembers,
         currentUserId: userProfile?.id,
+        canStake,
       }
       handleVoiceCreateMany(
         segments.map(segment => ({
@@ -1014,6 +1083,8 @@ const TaskInput = ({ initialMode, isModalOpen, onChoreUpdate, onClose }) => {
     setFrequency(null)
     setPriority(0)
     setPoints(-1)
+    setStakeCents(null)
+    stakeFromTextRef.current = false
     setIsAnyoneTask(false)
     setHasDescription(false)
     setDescription(null)
@@ -1123,6 +1194,9 @@ const TaskInput = ({ initialMode, isModalOpen, onChoreUpdate, onClose }) => {
       // not the task also repeats — otherwise a recurring task created with
       // a due date lands with nextDueDate: null.
       chore.nextDueDate = new Date(dueDate).toISOString()
+    }
+    if (stakeCents && dueDate && !isAlwaysAvailable && canStake) {
+      chore.stake = { amountCents: stakeCents }
     }
     if (hasReminders && (frequency || dueDate)) {
       chore.notification = true
@@ -1442,6 +1516,37 @@ const TaskInput = ({ initialMode, isModalOpen, onChoreUpdate, onClose }) => {
                   setUseCustomTime(false)
                 }}
               />
+              {beeminderEnabled && (
+                <StakePickerField
+                  emptyDisplay={pickerEmptyDisplay}
+                  value={stakeCents}
+                  account={beeminderAccount}
+                  disabled={!canStake || !hasDueDateForStake}
+                  disabledReason={
+                    !canStake
+                      ? t('stake.needsAccount')
+                      : t('stake.needsDueDate')
+                  }
+                  onChange={cents => {
+                    // A stake typed as `$5` lives in the text: rewrite or
+                    // drop the token too, or the next parse would undo this
+                    const typed = parseStake(taskText)
+                    if (stakeFromTextRef.current && typed.result) {
+                      const { end, start } = typed.highlight[0]
+                      const replacement = cents
+                        ? `$${(cents / 100).toFixed(2).replace(/\.00$/, '')}`
+                        : ''
+                      setTaskText(
+                        taskText.slice(0, start) +
+                          replacement +
+                          taskText.slice(end),
+                      )
+                    }
+                    stakeFromTextRef.current = false
+                    setStakeCents(cents)
+                  }}
+                />
+              )}
               <RepeatPickerField
                 emptyDisplay={pickerEmptyDisplay}
                 value={frequency}
@@ -1642,6 +1747,7 @@ const TaskInput = ({ initialMode, isModalOpen, onChoreUpdate, onClose }) => {
 
         {showVoice && (
           <VoicePanel
+            canStake={canStake}
             userLabels={voiceLabels}
             members={voiceMembers}
             userProfile={userProfile}

@@ -17,6 +17,7 @@ import {
 import { Box, Typography } from '@mui/joy'
 import PropTypes from 'prop-types'
 
+import { isChoreLocked } from '../../../utils/Chores'
 import { hapticMedium } from '../../../utils/Haptics'
 
 const canApproveReject = (chore, userProfile) =>
@@ -228,6 +229,12 @@ export const getChoreTrailingActions = ({
         />
       </SwipeAction>,
     )
+  }
+
+  // A Beeminder stake past its edit window locks the chore: no reschedule,
+  // edit or delete. Skip (on the leading side) stays, and charges.
+  if (isChoreLocked(chore)) {
+    return actions.length ? <TrailingActions>{actions}</TrailingActions> : null
   }
 
   actions.push(

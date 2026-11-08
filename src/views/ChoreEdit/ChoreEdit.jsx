@@ -72,6 +72,9 @@ import NotificationTemplate from '../../components/NotificationTemplate.jsx'
 import { usePageShortcutScope } from '../../contexts/KeyboardShortcutScopeContext'
 import { usePaywall } from '../../contexts/PaywallContext'
 import { useDocumentScanner } from '../../hooks/useDocumentScanner'
+import { useStakeLockText } from '../../hooks/useStakeText'
+import { useStakeTick } from '../../hooks/useStakeTick'
+import { useBeeminderAccount } from '../../queries/BeeminderQueries'
 import {
   useArchiveChore,
   useChore,
@@ -109,6 +112,8 @@ import { generateUUID } from '../../utils/UUID'
 import { useProjectFilter } from '../Chores/hooks/useProjectFilter.js'
 import LoadingComponent from '../components/Loading.jsx'
 import RichTextEditor from '../components/RichTextEditor.jsx'
+import StakeBadge from '../components/StakeBadge'
+import StakePickerField from '../components/StakePickerField'
 import SubTasks from '../components/SubTask.jsx'
 import { useLabels } from '../Labels/LabelQueries'
 import AttachmentViewerModal from '../Modals/Inputs/AttachmentViewerModal'
@@ -198,6 +203,10 @@ const ChoreEdit = () => {
   const [allUserThings, setAllUserThings] = useState([])
   const [thingTrigger, setThingTrigger] = useState(null)
   const [isThingValid, setIsThingValid] = useState(false)
+  // Beeminder stake in cents (null for none), and what the server has, so a
+  // save only sends a stake change when there is one
+  const [stakeCents, setStakeCents] = useState(null)
+  const [savedStakeCents, setSavedStakeCents] = useState(null)
 
   const [notificationMetadata, setNotificationMetadata] = useState({})
 
@@ -245,6 +254,15 @@ const ChoreEdit = () => {
     useCircleMembers()
   const { showError, showSuccess } = useNotification()
   const { isNativeScanner, scanDocument } = useDocumentScanner()
+  const { account: beeminderAccount, enabled: beeminderEnabled } =
+    useBeeminderAccount()
+  const isCloningChore = searchParams.get('clone') === 'true'
+  // A stake past its edit window locks the chore: this page becomes
+  // read-only. Clones start without a stake.
+  const stakeState = useStakeTick(isCloningChore ? null : choreData?.res)
+  const stakeLocked = Boolean(stakeState?.locked)
+  const stakeLockText = useStakeLockText(stakeState)
+  const hasDueDateForStake = Boolean(dueDate) && frequencyType !== 'always'
 
   const [userLabels, setUserLabels] = useState([])
 
@@ -310,6 +328,7 @@ const ChoreEdit = () => {
     isRolling,
     completionWindow,
     deadlineOffset,
+    stakeCents,
   })
   const latestSnapshot = useRef(snapshot)
   latestSnapshot.current = snapshot
@@ -601,11 +620,20 @@ const ChoreEdit = () => {
       }
     }
   }
+  // A stake needs a due date: drop it when the due date goes away
+  useEffect(() => {
+    if (!hasDueDateForStake) setStakeCents(null)
+  }, [hasDueDateForStake])
+
   // `shouldCreateAnother` is passed explicitly by the split-button menu so a
   // menu pick performs the save right away instead of only changing the
   // default (state updates wouldn't be visible to this call anyway).
   const HandleSaveChore = (shouldCreateAnother = createAnother) => {
     if (updateChoreMutation.isPending || createChoreMutation.isPending) return
+    if (stakeLocked) {
+      showError({ title: t('stake.lockedTitle'), message: stakeLockText })
+      return
+    }
     setAttemptToSave(true)
     if (!HandleValidateChore()) {
       console.log('validation failed')
@@ -658,6 +686,16 @@ const ChoreEdit = () => {
       priority: priority,
       projectId: projectId === 'default' ? null : projectId,
       draftId: newChoreId > 0 ? undefined : draftId,
+    }
+    // Send the stake only when it changed: an amount places or changes it,
+    // 0 removes it (the server allows both only inside the edit window)
+    const stakeToSave = hasDueDateForStake ? stakeCents : null
+    if (newChoreId > 0) {
+      if (stakeToSave !== savedStakeCents) {
+        chore.stake = { amountCents: stakeToSave ?? 0 }
+      }
+    } else if (stakeToSave) {
+      chore.stake = { amountCents: stakeToSave }
     }
     let SaveFunction = createChoreMutation.mutateAsync
     if (newChoreId > 0) {
@@ -864,6 +902,11 @@ const ChoreEdit = () => {
       )
 
       setLabelsV2(data.res.labelsV2)
+      const loadedStake = isCloneMode
+        ? null
+        : (data.res.stake?.amountCents ?? null)
+      setStakeCents(loadedStake)
+      setSavedStakeCents(loadedStake)
 
       setPriority(data.res.priority)
       setAssignStrategy(
@@ -1391,6 +1434,17 @@ const ChoreEdit = () => {
               ))}
             </Box>
           )}
+          {stakeLocked && (
+            <Alert
+              color='danger'
+              variant='soft'
+              data-testid='stake-locked-alert'
+              startDecorator={<StakeBadge state={stakeState} size='md' />}
+              sx={{ mb: 2 }}
+            >
+              {stakeLockText}
+            </Alert>
+          )}
           <Box className='task-editor-grid'>
             <EditorSection
               title={t('taskEditor.name')}
@@ -1574,6 +1628,30 @@ const ChoreEdit = () => {
                     </Box>
                   </Box>
                 )}
+
+              {beeminderEnabled && frequencyType !== 'always' && (
+                <Box mt={1} mb={2}>
+                  <Typography level='h4'>{t('stake.editorTitle')}</Typography>
+                  <Typography level='body-sm' sx={{ mb: 1 }}>
+                    {t('stake.editorDescription')}
+                  </Typography>
+                  {stakeLocked ? (
+                    <StakeBadge state={stakeState} size='md' />
+                  ) : (
+                    <StakePickerField
+                      value={stakeCents}
+                      onChange={setStakeCents}
+                      account={beeminderAccount}
+                      disabled={!beeminderAccount || !hasDueDateForStake}
+                      disabledReason={
+                        !beeminderAccount
+                          ? t('stake.needsAccount')
+                          : t('stake.needsDueDate')
+                      }
+                    />
+                  )}
+                </Box>
+              )}
 
               {!['once', 'no_repeat', 'trigger', 'always'].includes(
                 frequencyType,
@@ -2856,9 +2934,16 @@ const ChoreEdit = () => {
                 <Dropdown>
                   <ButtonGroup variant='outlined' color='neutral'>
                     <Button
+                      disabled={stakeLocked && isActive}
                       onClick={() => {
                         isActive
-                          ? archiveChore.mutate(choreId)
+                          ? archiveChore.mutate(choreId, {
+                              onError: error =>
+                                showError({
+                                  title: t('choreView.failedArchive'),
+                                  message: error?.message,
+                                }),
+                            })
                           : unarchiveChore.mutate(choreId)
                       }}
                     >
@@ -2878,7 +2963,11 @@ const ChoreEdit = () => {
                     </MenuButton>
                   </ButtonGroup>
                   <Menu disablePortal placement='top-end'>
-                    <MenuItem color='danger' onClick={handleDelete}>
+                    <MenuItem
+                      color='danger'
+                      disabled={stakeLocked}
+                      onClick={handleDelete}
+                    >
                       {t('taskEditor.delete')}
                     </MenuItem>
                   </Menu>
@@ -2927,6 +3016,7 @@ const ChoreEdit = () => {
                         createChoreMutation.isPending
                       }
                       onClick={() => HandleSaveChore()}
+                      disabled={stakeLocked}
                       sx={{ minWidth: 96 }}
                     >
                       {createAnother ? (

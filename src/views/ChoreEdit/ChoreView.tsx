@@ -20,6 +20,7 @@ import {
   Unarchive,
 } from '@mui/icons-material'
 import {
+  Alert,
   Box,
   Button,
   Card,
@@ -49,6 +50,8 @@ import {
   useInlineSubTaskEditor,
 } from '../../hooks/useInlineSubTaskEditor'
 import { usePendingCommands } from '../../hooks/usePendingCommands'
+import { useStakeCountdown, useStakeLockText } from '../../hooks/useStakeText'
+import { useStakeTick } from '../../hooks/useStakeTick'
 import {
   useChoreDetails,
   useChoreHistory,
@@ -74,6 +77,7 @@ import {
   ChoreHistoryStatus,
   ChoreStatus,
   notInCompletionWindow,
+  STAKE_LOCKED_ACTIONS,
 } from '../../utils/Chores.jsx'
 import { getTextColorFromBackgroundColor } from '../../utils/Colors.jsx'
 import { commandQueue, CommandType } from '../../utils/CommandQueue'
@@ -94,7 +98,9 @@ import {
   UpdateDueDate,
 } from '../../utils/Fetcher'
 import { offlineDB } from '../../utils/OfflineDB'
+import { serverErrorMessage } from '../../utils/responseError'
 import { getSafeBottomPadding } from '../../utils/SafeAreaUtils.js'
+import { formatStakeAmount, STAKE_LEVEL_COLOR } from '../../utils/stakes'
 import { removeEmptySubTasks } from '../../utils/SubTasks'
 import ChoreActionMenu from '../components/ChoreActionMenu'
 import DueDatePickerModal, {
@@ -104,6 +110,7 @@ import DueDatePickerModal, {
 import LoadingComponent from '../components/Loading.jsx'
 import PendingBadge from '../components/PendingBadge'
 import UntypedRichTextEditor from '../components/RichTextEditor.jsx'
+import StakeBadge from '../components/StakeBadge'
 import UntypedSubTasks from '../components/SubTask.jsx'
 import {
   SubTaskEditButton,
@@ -244,6 +251,11 @@ const ChoreView = () => {
   const [note, setNote] = useState<string | null>(null)
   const queryClient = useQueryClient()
   const { showError, showSuccess, showUndo } = useNotification()
+  // Beeminder stake, re-evaluated as its window closes and deadline nears
+  const stakeState = useStakeTick(chore)
+  const stakeLocked = Boolean(stakeState?.locked)
+  const stakeCountdown = useStakeCountdown(stakeState)
+  const stakeLockText = useStakeLockText(stakeState)
 
   const [searchParams] = useSearchParams()
 
@@ -486,6 +498,29 @@ const ChoreView = () => {
   const handleSkippingTask = async () => {
     try {
       const response = await SkipChore(choreId)
+      if (!response.ok) {
+        showError({
+          title: t('choreView.undoFailed'),
+          message: await serverErrorMessage(
+            response,
+            t('choreView.unableSkip'),
+          ),
+        })
+        return
+      }
+      if (stakeState) {
+        // The stake was charged; undoing the skip wouldn't refund it, so
+        // there's no undo here
+        const data = await response.json()
+        setChore(data.res)
+        queryClient.invalidateQueries({ queryKey: ['chores'] })
+        showSuccess({
+          message: t('stake.skippedCharged', {
+            amount: formatStakeAmount(stakeState.amountCents),
+          }),
+        })
+        return
+      }
       if (response.ok) {
         const data = await response.json()
         setChore(data.res)
@@ -730,7 +765,11 @@ const ChoreView = () => {
     setConfirmModelConfig({
       isOpen: true,
       title: t('choreView.skipTask'),
-      message: t('choreView.skipTaskConfirmation'),
+      message: stakeState
+        ? t('stake.skipConfirm', {
+            amount: formatStakeAmount(stakeState.amountCents),
+          })
+        : t('choreView.skipTaskConfirmation'),
       confirmText: t('choreView.skip'),
       cancelText: t('choreView.cancel'),
       onClose: confirmed => {
@@ -749,6 +788,14 @@ const ChoreView = () => {
         await offlineDB.saveChores([{ ...chore, isActive: false }])
         setChore({ ...chore, isActive: false })
         queryClient.invalidateQueries({ queryKey: ['chores'] })
+      } else {
+        showError({
+          title: t('choreView.failedArchive'),
+          message: await serverErrorMessage(
+            response,
+            t('choreView.unableArchiveTask'),
+          ),
+        })
       }
     } catch (error) {
       showError({
@@ -777,6 +824,14 @@ const ChoreView = () => {
               message: t('choreView.taskDeletedMessage'),
             })
             navigate('/chores')
+          } else {
+            showError({
+              title: t('choreView.failedDelete'),
+              message: await serverErrorMessage(
+                response,
+                t('choreView.unableDeleteTask'),
+              ),
+            })
           }
         } catch (error) {
           showError({
@@ -984,6 +1039,27 @@ const ChoreView = () => {
           <Typography level='h3'>{chore.name}</Typography>
           <PendingBadge commands={pendingCmds} />
         </Box>
+        {stakeState && (
+          <Alert
+            variant='soft'
+            color={STAKE_LEVEL_COLOR[stakeState.level]}
+            startDecorator={<StakeBadge state={stakeState} size='md' />}
+            data-testid='stake-banner'
+            sx={{ mb: 1, maxWidth: 520, textAlign: 'left' }}
+          >
+            <Box>
+              <Typography level='title-sm' textColor='inherit'>
+                {t('stake.atStake', {
+                  amount: formatStakeAmount(stakeState.amountCents),
+                })}
+                {stakeCountdown ? ` · ${stakeCountdown}` : ''}
+              </Typography>
+              <Typography level='body-sm' textColor='inherit'>
+                {stakeLockText}
+              </Typography>
+            </Box>
+          </Alert>
+        )}
         {chore.isActive === false && (
           <Chip
             startDecorator={<Archive />}
@@ -1167,6 +1243,8 @@ const ChoreView = () => {
               justifyContent: 'center',
               p: 1,
             }}
+            disabled={stakeLocked}
+            title={stakeLocked ? stakeLockText : undefined}
             onClick={() => {
               navigate(`/chores/${choreId}/edit`)
             }}
@@ -1177,6 +1255,7 @@ const ChoreView = () => {
           <ChoreActionMenu
             chore={chore}
             hiddenActions={['view'] as never[]}
+            disabledActions={stakeLocked ? STAKE_LOCKED_ACTIONS : []}
             onAction={handleMenuAction}
             onWriteNFC={() => setActiveModal('writeNFC')}
             onCompleteWithNote={() => setNote('')}

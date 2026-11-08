@@ -1,6 +1,7 @@
 import moment from 'moment'
 
 import { TASK_COLOR } from './Colors.jsx'
+import { getStakeState, stakeRankBoost } from './stakes'
 
 export const priorityOrder = [1, 2, 3, 4, 0]
 // ChoreGrouperOptions enum:
@@ -387,9 +388,13 @@ export const ChoresGrouper = (groupBy, chores, filter, direction = 'asc') => {
 
   return groups
 }
+// Smart order: priority first, then status, then due date. A Beeminder stake
+// lifts a chore by a fraction of a priority level that grows as its deadline
+// nears (see stakeRankBoost), so staked chores rise faster than the rest.
 export const ChoreSorter = (a, b) => {
-  const priorityA = priorityOrder.indexOf(a.priority)
-  const priorityB = priorityOrder.indexOf(b.priority)
+  const now = Date.now()
+  const priorityA = priorityOrder.indexOf(a.priority) - stakeRankBoost(a, now)
+  const priorityB = priorityOrder.indexOf(b.priority) - stakeRankBoost(b, now)
   if (priorityA !== priorityB) {
     return priorityA - priorityB
   }
@@ -406,6 +411,21 @@ export const ChoreSorter = (a, b) => {
 
   return new Date(a.nextDueDate) - new Date(b.nextDueDate)
 }
+// Menu actions a Beeminder stake blocks once its edit window has closed.
+// Completing stays allowed, and so does skipping (which charges the stake).
+export const STAKE_LOCKED_ACTIONS = [
+  'edit',
+  'schedule',
+  'changeDueDate',
+  'priority',
+  'moveToProject',
+  'archive',
+  'delete',
+]
+
+// True when a Beeminder stake has locked the chore against changes.
+export const isChoreLocked = chore => getStakeState(chore)?.locked ?? false
+
 export const notInCompletionWindow = chore => {
   return (
     chore.completionWindow &&

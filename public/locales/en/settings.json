@@ -519,7 +519,7 @@
   "beeminder": {
     "title": "Beeminder",
     "apiKeyTitle": "API key",
-    "apiKeyDescription": "Connect your Beeminder account so Donetick can report completed tasks to your goals.",
+    "apiKeyDescription": "Connect your Beeminder account to put money on tasks. A staked task that goes overdue or is skipped is charged through Beeminder.",
     "apiKeyLabel": "Beeminder auth token",
     "apiKeyPlaceholder": "Paste your auth token",
     "showKey": "Show key",
@@ -529,7 +529,27 @@
     "saveSuccess": "Saved. Your Beeminder account is linked.",
     "invalidKey": "Beeminder rejected this key. Check it and try again.",
     "saveFailed": "Couldn't save your key. Check that the server can reach Beeminder and try again.",
-    "linkedAs": "Linked to Beeminder as {{username}}"
+    "linkedAs": "Linked to Beeminder as {{username}}",
+    "tokenRejected": "Beeminder no longer accepts the saved auth token. Paste a new one below.",
+    "deadbeat": "Beeminder says your payment details are out of date, so charges may fail. Update them on Beeminder.",
+    "stakesTitle": "Stakes",
+    "stakesDescription": "Type an amount like $5 when adding a task with a due date, or use the Place stake button.",
+    "defaultLabel": "Label for staked tasks",
+    "noLabel": "No label",
+    "defaultLabelHelp": "Added to a task when you place a stake on it, and removed if you take the stake off.",
+    "dryRun": "Dry run",
+    "dryRunHelp": "Simulate charges: Beeminder records nothing and no money moves.",
+    "dryRunServer": "This server simulates every charge, so no money moves.",
+    "editWindow": "After placing a stake you have {{time}} to change or remove it, or to edit or delete the task. Then the task locks. The server sets this.",
+    "settingsFailed": "Couldn't save that change. Try again.",
+    "duration": {
+      "m_one": "{{count}} minute",
+      "m_other": "{{count}} minutes",
+      "h_one": "{{count}} hour",
+      "h_other": "{{count}} hours",
+      "d_one": "{{count}} day",
+      "d_other": "{{count}} days"
+    }
   },
   "storage": {
     "title": "Storage Settings",

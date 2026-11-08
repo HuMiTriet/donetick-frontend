@@ -1,6 +1,7 @@
 import './VoicePanel.css'
 
 import {
+  AttachMoney,
   CalendarMonth,
   Check,
   Close,
@@ -21,6 +22,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { TASK_COLOR } from '../../../utils/Colors'
+import { formatStakeAmount } from '../../../utils/stakes'
 import AssigneePickerField from '../AssigneePickerField'
 import DueDatePickerField from '../DueDatePickerField'
 import LabelsPickerField from '../LabelsPickerField'
@@ -37,6 +39,7 @@ const HIGHLIGHT_CLASS = {
   assignee: 'highlight-assignee',
   label: 'highlight-label',
   dueDate: 'highlight-date',
+  stake: 'highlight-stake',
 }
 
 const PRIORITY_COLORS = {
@@ -125,6 +128,14 @@ const buildChips = (
       color: 'warning',
       icon: <CalendarMonth sx={{ fontSize: 12 }} />,
       label: formatDue(effective.dueDate),
+    })
+  }
+  if (effective.stakeCents) {
+    chips.push({
+      key: 'stake',
+      color: 'danger',
+      icon: <AttachMoney sx={{ fontSize: 12 }} />,
+      label: formatStakeAmount(effective.stakeCents),
     })
   }
   if (frequencyLabel) {
@@ -454,6 +465,7 @@ const TaskPreviewCard = ({
  * onStateChange so the modal can label and enable that button.
  */
 const VoicePanel = ({
+  canStake = false,
   defaultNotificationTemplates = [],
   members = [],
   onStateChange,
@@ -482,8 +494,9 @@ const VoicePanel = ({
       members,
       currentUserId: userProfile?.id,
       defaultNotificationTemplates,
+      canStake,
     }),
-    [userLabels, members, userProfile, defaultNotificationTemplates],
+    [userLabels, members, userProfile, defaultNotificationTemplates, canStake],
   )
 
   const partialParsed = useMemo(
