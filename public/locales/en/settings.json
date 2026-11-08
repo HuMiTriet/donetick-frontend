@@ -537,9 +537,7 @@
     "defaultLabel": "Label for staked tasks",
     "noLabel": "No label",
     "defaultLabelHelp": "Added to a task when you place a stake on it, and removed if you take the stake off.",
-    "dryRun": "Dry run",
-    "dryRunHelp": "Simulate charges: Beeminder records nothing and no money moves.",
-    "dryRunServer": "This server simulates every charge, so no money moves.",
+    "dryRunOn": "Dry run is on: charges are simulated and no money moves. This is set on the server.",
     "editWindow": "After placing a stake you have {{time}} to change or remove it, or to edit or delete the task. Then the task locks. The server sets this.",
     "settingsFailed": "Couldn't save that change. Try again.",
     "duration": {

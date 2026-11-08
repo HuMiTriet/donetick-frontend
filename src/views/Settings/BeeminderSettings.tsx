@@ -1,6 +1,7 @@
 import {
   CheckCircleRounded,
   ErrorOutlineRounded,
+  InfoOutlined,
   KeyRounded,
   Visibility,
   VisibilityOff,
@@ -20,7 +21,6 @@ import {
   Option,
   Select,
   Stack,
-  Switch,
   Typography,
 } from '@mui/joy'
 import { useQueryClient } from '@tanstack/react-query'
@@ -42,13 +42,13 @@ import SettingsLayout from './SettingsLayout'
 const BEEMINDER_TOKEN_URL = 'https://www.beeminder.com/api/v1/auth_token.json'
 
 type BeeminderAccount = {
-  // Beeminder username; only filled when the server asked Beeminder
+  // the linked Beeminder username
   username: string | null
   // false when Beeminder rejected the stored token, null when not checked
   tokenValid: boolean | null
   deadbeat: boolean
+  // charges are simulated; set by the server, read-only here
   dryRun: boolean
-  serverDryRun: boolean
   defaultLabelId: number | null
   editWindowSeconds: number
   minAmountCents: number
@@ -65,7 +65,6 @@ const saveAccount = SaveBeeminderAccount as (
 ) => Promise<Response | null>
 const saveSettings = SaveBeeminderSettings as (settings: {
   defaultLabelId: number | null
-  dryRun: boolean
 }) => Promise<Response | null>
 
 type SaveResult =
@@ -136,21 +135,18 @@ const BeeminderSettings = () => {
   }
 
   const updateSettings = async (
-    changes: Partial<Pick<BeeminderAccount, 'defaultLabelId' | 'dryRun'>>,
+    changes: Pick<BeeminderAccount, 'defaultLabelId'>,
   ) => {
     if (!account) return
     const next = { ...account, ...changes }
     setSettingsError(false)
     setAccount(next)
     try {
-      const resp = await saveSettings({
-        defaultLabelId: next.defaultLabelId,
-        dryRun: next.dryRun,
-      })
+      const resp = await saveSettings({ defaultLabelId: next.defaultLabelId })
       if (!resp?.ok) throw new Error('save failed')
       const { res } = (await resp.json()) as AccountResponse
-      // The settings response doesn't ask Beeminder for the username again
-      shareAccount(res ? { ...res, username: account.username } : next)
+      // Saving settings doesn't check the token with Beeminder again
+      shareAccount(res ? { ...res, tokenValid: account.tokenValid } : next)
     } catch {
       setAccount(account)
       setSettingsError(true)
@@ -297,32 +293,15 @@ const BeeminderSettings = () => {
               <FormHelperText>{t('beeminder.defaultLabelHelp')}</FormHelperText>
             </FormControl>
 
-            <FormControl>
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  justifyContent: 'space-between',
-                  gap: 1.5,
-                }}
+            {account.dryRun && (
+              <Alert
+                color='neutral'
+                variant='soft'
+                startDecorator={<InfoOutlined />}
               >
-                <Typography level='title-sm' sx={{ fontWeight: 600 }}>
-                  {t('beeminder.dryRun')}
-                </Typography>
-                <Switch
-                  checked={account.dryRun || account.serverDryRun}
-                  disabled={account.serverDryRun}
-                  onChange={event =>
-                    updateSettings({ dryRun: event.target.checked })
-                  }
-                />
-              </Box>
-              <FormHelperText>
-                {account.serverDryRun
-                  ? t('beeminder.dryRunServer')
-                  : t('beeminder.dryRunHelp')}
-              </FormHelperText>
-            </FormControl>
+                {t('beeminder.dryRunOn')}
+              </Alert>
+            )}
 
             {editWindow && (
               <Typography level='body-sm' textColor='text.secondary'>

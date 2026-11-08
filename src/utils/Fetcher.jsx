@@ -828,11 +828,12 @@ const SaveBeeminderAccount = authToken => {
   })
 }
 
-const SaveBeeminderSettings = ({ defaultLabelId, dryRun }) => {
+// Dry run isn't sent: only the server decides it.
+const SaveBeeminderSettings = ({ defaultLabelId }) => {
   return Fetch(`/beeminder/account/settings`, {
     method: 'PUT',
     headers: HEADERS(),
-    body: JSON.stringify({ dryRun, defaultLabelId }),
+    body: JSON.stringify({ defaultLabelId }),
   })
 }
 
