@@ -5,6 +5,7 @@ import ChoreEdit from '@/views/ChoreEdit/ChoreEdit'
 import Error from '@/views/Error'
 import AccountSettings from '@/views/Settings/AccountSettings'
 import AdvancedSettings from '@/views/Settings/AdvancedSettings'
+import BeeminderSettings from '@/views/Settings/BeeminderSettings'
 import BridgeSettings from '@/views/Settings/BridgeSettings'
 import ChildUserSettings from '@/views/Settings/ChildUserSettings'
 import CircleSettings from '@/views/Settings/CircleSettings'
@@ -112,6 +113,10 @@ const Router = createBrowserRouter([
           {
             path: 'apitokens',
             element: <APITokenSettings />,
+          },
+          {
+            path: 'beeminder',
+            element: <BeeminderSettings />,
           },
           {
             path: 'bridge',

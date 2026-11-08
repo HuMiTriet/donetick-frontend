@@ -66,6 +66,10 @@
         "title": "Calendar Sync",
         "description": "Subscribe to your tasks from Apple Calendar, Google Calendar, Outlook, or another calendar app."
       },
+      "beeminder": {
+        "title": "Beeminder",
+        "description": "Link your Beeminder account with your auth token."
+      },
       "storage": {
         "title": "Storage Settings",
         "description": "Backup and restore your data, manage local storage and sync preferences."
@@ -511,6 +515,21 @@
       "deviceLimitReached": "This Bridge account's active device limit has been reached. Remove an unused device or upgrade to Plus.",
       "validationError": "Check the values entered and try again."
     }
+  },
+  "beeminder": {
+    "title": "Beeminder",
+    "apiKeyTitle": "API key",
+    "apiKeyDescription": "Connect your Beeminder account so Donetick can report completed tasks to your goals.",
+    "apiKeyLabel": "Beeminder auth token",
+    "apiKeyPlaceholder": "Paste your auth token",
+    "showKey": "Show key",
+    "hideKey": "Hide key",
+    "whereToFind": "Where do I find my auth token?",
+    "save": "Save",
+    "saveSuccess": "Saved. Your Beeminder account is linked.",
+    "invalidKey": "Beeminder rejected this key. Check it and try again.",
+    "saveFailed": "Couldn't save your key. Check that the server can reach Beeminder and try again.",
+    "linkedAs": "Linked to Beeminder as {{username}}"
   },
   "storage": {
     "title": "Storage Settings",

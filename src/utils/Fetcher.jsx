@@ -811,6 +811,21 @@ const RevokeCalendarURL = () => {
   })
 }
 
+const GetBeeminderAccount = () => {
+  return Fetch(`/beeminder/account`, {
+    method: 'GET',
+    headers: HEADERS(),
+  })
+}
+
+const SaveBeeminderAccount = authToken => {
+  return Fetch(`/beeminder/account`, {
+    method: 'PUT',
+    headers: HEADERS(),
+    body: JSON.stringify({ authToken }),
+  })
+}
+
 // Timer/TimeSession API functions
 const GetChoreTimer = choreId => {
   return Fetch(`/chores/${choreId}/timer`, {
@@ -1171,6 +1186,7 @@ export {
   GetAllCircleMembers,
   GetAllUsers,
   GetArchivedChores,
+  GetBeeminderAccount,
   GetBridgeStatus,
   GetCalendarURL,
   GetChildUsers,
@@ -1225,6 +1241,7 @@ export {
   RevokeCalendarURL,
   RotateBridgeCredential,
   RotateCalendarURL,
+  SaveBeeminderAccount,
   SaveChore,
   SaveThing,
   SetupMFA,
