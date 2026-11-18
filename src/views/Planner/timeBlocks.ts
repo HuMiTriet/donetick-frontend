@@ -150,5 +150,9 @@ export const dueMarkers = (chores: PlannerChore[]): EventInput[] => {
   })
 }
 
+export const hasBlock = (chore: Chore): boolean =>
+  Boolean(chore.nextDueDate) &&
+  templatesOf(chore).some(template => offsetMs(template) < 0)
+
 export const isMine = (chore: Chore, userId: number): boolean =>
   !chore.assignedTo || chore.assignedTo === userId

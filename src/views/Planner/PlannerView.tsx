@@ -28,7 +28,7 @@ import type {
   PlannerChore,
   PlannerView as View,
 } from './timeBlocks'
-import { blockSeconds, isMine } from './timeBlocks'
+import { blockSeconds, hasBlock, isMine } from './timeBlocks'
 import { useTimeBlockActions } from './useTimeBlockActions'
 
 const FROM_PLANNER: ReturnState = { returnTo: '/planner' }
@@ -78,7 +78,7 @@ const PlannerView = () => {
     () =>
       ChoresGrouper(
         GROUPING_OPTIONS.SMART,
-        chores.filter(chore => !chore._pendingCreate),
+        chores.filter(chore => !chore._pendingCreate && !hasBlock(chore)),
       ) as ChoreGroup[],
     [chores],
   )
