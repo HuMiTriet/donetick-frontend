@@ -1,6 +1,7 @@
 import { Draggable } from '@fullcalendar/react/interaction'
 import { Box, Chip, Sheet, Typography } from '@mui/joy'
 import type { TFunction } from 'i18next'
+import type { PointerEvent } from 'react'
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -8,7 +9,9 @@ import { getPriorityColor } from '../../utils/Colors'
 import type { ChoreGroup, PlannerChore } from './timeBlocks'
 import { blockSeconds } from './timeBlocks'
 
-type SelectChore = (id: number | null) => void
+type ItemClick = (chore: PlannerChore) => void
+
+const CLICK_SLOP_PX = 6
 
 const formatDuration = (seconds: number, t: TFunction) => {
   const minutes = Math.round(seconds / 60)
@@ -42,24 +45,48 @@ type TaskItemProps = {
   compact?: boolean
   groupColor: string
   selected: boolean
-  onSelect: SelectChore
+  onItemClick: ItemClick
 }
 
 const TaskItem = ({
   chore,
   compact,
   groupColor,
-  onSelect,
+  onItemClick,
   selected,
 }: TaskItemProps) => {
   const { t } = useTranslation('chores')
   const seconds = blockSeconds(chore)
+  const dragged = useRef(false)
   const common = {
     'data-chore-id': chore.id,
     'data-title': chore.name,
     'data-duration': seconds,
     'data-color': getPriorityColor(chore.priority),
-    onClick: () => onSelect(selected ? null : chore.id),
+    onPointerDown: (event: PointerEvent) => {
+      dragged.current = false
+      const start = { x: event.clientX, y: event.clientY }
+      const track = (move: globalThis.PointerEvent) => {
+        if (
+          Math.hypot(move.clientX - start.x, move.clientY - start.y) >
+          CLICK_SLOP_PX
+        ) {
+          dragged.current = true
+        }
+      }
+      const stop = () => {
+        document.removeEventListener('pointermove', track)
+        document.removeEventListener('pointerup', stop)
+        document.removeEventListener('pointercancel', stop)
+      }
+      document.addEventListener('pointermove', track)
+      document.addEventListener('pointerup', stop)
+      document.addEventListener('pointercancel', stop)
+    },
+    onClick: () => {
+      if (!dragged.current) onItemClick(chore)
+      dragged.current = false
+    },
   }
 
   if (compact) {
@@ -107,10 +134,10 @@ type SectionProps = {
   compact?: boolean
   group: ChoreGroup
   selectedId: number | null
-  onSelect: SelectChore
+  onItemClick: ItemClick
 }
 
-const Section = ({ compact, group, onSelect, selectedId }: SectionProps) => {
+const Section = ({ compact, group, onItemClick, selectedId }: SectionProps) => {
   const items = group.content.map(chore => (
     <TaskItem
       key={chore.id}
@@ -118,7 +145,7 @@ const Section = ({ compact, group, onSelect, selectedId }: SectionProps) => {
       compact={compact}
       groupColor={group.color}
       selected={selectedId === chore.id}
-      onSelect={onSelect}
+      onItemClick={onItemClick}
     />
   ))
   if (compact) return <>{items}</>
@@ -139,13 +166,13 @@ type PlannerTaskListProps = {
   compact?: boolean
   groups: ChoreGroup[]
   selectedId: number | null
-  onSelect: SelectChore
+  onItemClick: ItemClick
 }
 
 const PlannerTaskList = ({
   compact,
   groups,
-  onSelect,
+  onItemClick,
   selectedId,
 }: PlannerTaskListProps) => {
   const { t } = useTranslation('chores')
@@ -192,7 +219,7 @@ const PlannerTaskList = ({
             compact={compact}
             group={group}
             selectedId={selectedId}
-            onSelect={onSelect}
+            onItemClick={onItemClick}
           />
         ))
       )}

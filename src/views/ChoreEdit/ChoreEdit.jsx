@@ -72,6 +72,7 @@ import NotificationTemplate from '../../components/NotificationTemplate.jsx'
 import { usePageShortcutScope } from '../../contexts/KeyboardShortcutScopeContext'
 import { usePaywall } from '../../contexts/PaywallContext'
 import { useDocumentScanner } from '../../hooks/useDocumentScanner'
+import { useReturnTo } from '../../hooks/useReturnTo'
 import {
   useArchiveChore,
   useChore,
@@ -255,6 +256,7 @@ const ChoreEdit = () => {
   }, [userLabelsRaw])
 
   const Navigate = useNavigate()
+  const { returnState, returnTo } = useReturnTo()
 
   // Only people who can see the selected project can be assigned to its tasks
   // (the server rejects anybody else).
@@ -688,9 +690,14 @@ const ChoreEdit = () => {
         }
         dirtyGuard.current = false
         setSavedSnapshot(latestSnapshot.current)
-        Navigate(shouldCreateAnother ? '/chores/create' : '/chores', {
-          state: shouldCreateAnother ? { createAnother: true } : null,
-        })
+        Navigate(
+          shouldCreateAnother ? '/chores/create' : (returnTo ?? '/chores'),
+          {
+            state: shouldCreateAnother
+              ? { createAnother: true, returnTo }
+              : null,
+          },
+        )
       })
       .catch(error => {
         console.error('Failed to save chore:', error)
@@ -809,7 +816,9 @@ const ChoreEdit = () => {
       // Cmd/Ctrl + Escape key to cancel
       if (event.key === 'Escape' && (event.ctrlKey || event.metaKey)) {
         event.preventDefault()
-        Navigate(choreId ? `/chores/${choreId}` : '/chores')
+        Navigate(choreId ? `/chores/${choreId}` : (returnTo ?? '/chores'), {
+          state: returnState,
+        })
         return
       }
     }
@@ -1045,7 +1054,7 @@ const ChoreEdit = () => {
         if (isConfirmed === true) {
           deleteChores.mutate([choreId], {
             onSuccess: () => {
-              Navigate('/chores')
+              Navigate(returnTo ?? '/chores')
             },
             onError: error => {
               showError({
@@ -1104,7 +1113,11 @@ const ChoreEdit = () => {
   return (
     <WizardContainer
       maxWidth={false}
-      onClose={() => Navigate(choreId ? `/chores/${choreId}` : '/chores')}
+      onClose={() =>
+        Navigate(choreId ? `/chores/${choreId}` : (returnTo ?? '/chores'), {
+          state: returnState,
+        })
+      }
       onClickCapture={captureInitialValues}
       onChangeCapture={captureInitialValues}
       onKeyDownCapture={captureInitialValues}
@@ -1227,7 +1240,12 @@ const ChoreEdit = () => {
               color='neutral'
               variant='plain'
               onClick={() =>
-                Navigate(choreId ? `/chores/${choreId}` : '/chores')
+                Navigate(
+                  choreId ? `/chores/${choreId}` : (returnTo ?? '/chores'),
+                  {
+                    state: returnState,
+                  },
+                )
               }
               sx={{ display: { xs: 'inline-flex', sm: 'none' } }}
             >
@@ -2902,7 +2920,12 @@ const ChoreEdit = () => {
               color='neutral'
               variant='plain'
               onClick={() => {
-                Navigate(choreId ? `/chores/${choreId}` : '/chores')
+                Navigate(
+                  choreId ? `/chores/${choreId}` : (returnTo ?? '/chores'),
+                  {
+                    state: returnState,
+                  },
+                )
               }}
             >
               {t('taskEditor.cancel')}

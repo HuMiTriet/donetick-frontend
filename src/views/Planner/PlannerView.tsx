@@ -17,6 +17,7 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 
+import type { ReturnState } from '../../hooks/useReturnTo'
 import { useChores } from '../../queries/ChoreQueries'
 import { useUserProfile } from '../../queries/UserQueries'
 import { ChoresGrouper, GROUPING_OPTIONS } from '../../utils/Chores'
@@ -29,6 +30,8 @@ import type {
 } from './timeBlocks'
 import { blockSeconds, isMine } from './timeBlocks'
 import { useTimeBlockActions } from './useTimeBlockActions'
+
+const FROM_PLANNER: ReturnState = { returnTo: '/planner' }
 
 const formatRangeTitle = (view?: ViewApi) => {
   if (!view) return ''
@@ -182,7 +185,9 @@ const PlannerView = () => {
           compact
           groups={groups}
           selectedId={selectedId}
-          onSelect={setSelectedId}
+          onItemClick={chore =>
+            setSelectedId(id => (id === chore.id ? null : chore.id))
+          }
         />
       )}
       {!isDesktop && selectedId !== null && (
@@ -210,7 +215,9 @@ const PlannerView = () => {
           onRemove={removeBlock}
           onSave={saveBlock}
           onSlotClick={handleSlotClick}
-          onChoreClick={chore => navigate(`/chores/${chore.id}`)}
+          onChoreClick={chore =>
+            navigate(`/chores/${chore.id}`, { state: FROM_PLANNER })
+          }
         />
         {isDesktop && (
           <Sheet
@@ -220,7 +227,9 @@ const PlannerView = () => {
             <PlannerTaskList
               groups={groups}
               selectedId={selectedId}
-              onSelect={setSelectedId}
+              onItemClick={chore =>
+                navigate(`/chores/${chore.id}/edit`, { state: FROM_PLANNER })
+              }
             />
           </Sheet>
         )}

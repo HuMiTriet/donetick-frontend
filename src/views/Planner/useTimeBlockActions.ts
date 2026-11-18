@@ -1,11 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { PAYWALL_REASON, usePaywall } from '../../contexts/PaywallContext'
 import { useUpdateChore } from '../../queries/ChoreQueries'
 import { useNotification } from '../../service/NotificationProvider'
 import type { Chore } from '../../types/models'
+import { GetChoreByID } from '../../utils/Fetcher'
 import type { RemoveBlock, SaveBlock } from './TimeBlockCalendar'
 import type { PlannerChore } from './timeBlocks'
 import { withBlockAt, withoutBlock } from './timeBlocks'
@@ -37,6 +38,9 @@ export const useTimeBlockActions = () => {
     showSuccess: Notify
   }
 
+  const queues = useRef(new Map<number, Promise<void>>())
+  const usedUpdatedAt = useRef(new Map<number, string>())
+
   const replaceChore = useCallback(
     (next: Chore) => {
       queryClient.setQueryData<ChoresData>(ACTIVE_CHORES_KEY, old =>
@@ -46,6 +50,77 @@ export const useTimeBlockActions = () => {
       )
     },
     [queryClient],
+  )
+
+  const showOptimistic = useCallback(
+    async (next: Chore) => {
+      await queryClient.cancelQueries({ queryKey: ['chores'] })
+      replaceChore(next)
+    },
+    [queryClient, replaceChore],
+  )
+
+  const latestOf = useCallback(
+    (chore: PlannerChore): PlannerChore =>
+      queryClient
+        .getQueryData<ChoresData>(ACTIVE_CHORES_KEY)
+        ?.res?.find(c => c.id === chore.id) ?? chore,
+    [queryClient],
+  )
+
+  const freshUpdatedAt = useCallback(async (chore: PlannerChore) => {
+    const used = usedUpdatedAt.current.get(chore.id)
+    if (
+      used === undefined ||
+      new Date(chore.updatedAt).getTime() > new Date(used).getTime()
+    ) {
+      return chore.updatedAt
+    }
+    try {
+      const response = (await GetChoreByID(chore.id)) as Response
+      if (!response.ok) return chore.updatedAt
+      const body = (await response.json()) as { res?: Chore }
+      return body.res?.updatedAt ?? chore.updatedAt
+    } catch {
+      return chore.updatedAt
+    }
+  }, [])
+
+  const persist = useCallback(
+    (next: PlannerChore): Promise<SavedChore> => {
+      const run = async () => {
+        const payload = { ...next, updatedAt: await freshUpdatedAt(next) }
+        const saved = await updateChore({
+          ...payload,
+          labelsV2: payload.labelsV2 ?? [],
+        })
+        if (!saved?._pendingUpdate) {
+          usedUpdatedAt.current.set(next.id, payload.updatedAt)
+        }
+        return saved
+      }
+      const previous = queues.current.get(next.id) ?? Promise.resolve()
+      const result = previous.then(run)
+      const tail = result.then(
+        () => undefined,
+        () => undefined,
+      )
+      queues.current.set(next.id, tail)
+      void tail.then(() => {
+        if (queues.current.get(next.id) === tail) queues.current.delete(next.id)
+      })
+      return result
+    },
+    [freshUpdatedAt, updateChore],
+  )
+
+  const showFailure = useCallback(
+    () =>
+      showError({
+        title: t('actions.failRescheduleTitle'),
+        message: t('actions.failRescheduleMessage'),
+      }),
+    [showError, t],
   )
 
   const saveBlock: SaveBlock = useCallback(
@@ -61,81 +136,82 @@ export const useTimeBlockActions = () => {
         showPaywall(PAYWALL_REASON.ADVANCED_REMINDERS)
         return
       }
-      const updated = withBlockAt(chore, end, seconds, index)
+      const base = latestOf(chore)
+      const updated = withBlockAt(base, end, seconds, index)
       if (!updated) {
         revert?.()
         showError({ message: t('planner.mustEndBeforeDue') })
         return
       }
 
-      replaceChore(updated)
+      await showOptimistic(updated)
       try {
-        const saved = await updateChore({
-          ...updated,
-          labelsV2: updated.labelsV2 ?? [],
-        })
+        const saved = await persist(updated)
         if (saved?._pendingUpdate) {
           showSuccess({ message: t('planner.offlineSaved') })
         }
       } catch {
-        replaceChore(chore)
+        replaceChore(base)
         revert?.()
-        showError({
-          title: t('actions.failRescheduleTitle'),
-          message: t('actions.failRescheduleMessage'),
-        })
+        showFailure()
       }
     },
-    [isPlus, replaceChore, showError, showPaywall, showSuccess, t, updateChore],
+    [
+      isPlus,
+      latestOf,
+      persist,
+      replaceChore,
+      showError,
+      showFailure,
+      showOptimistic,
+      showPaywall,
+      showSuccess,
+      t,
+    ],
   )
 
   const removeBlock: RemoveBlock = useCallback(
     async (chore: PlannerChore, index: number) => {
-      const updated = withoutBlock(chore, index)
-      const failed = (restore: PlannerChore) => {
-        replaceChore(restore)
-        showError({
-          title: t('actions.failRescheduleTitle'),
-          message: t('actions.failRescheduleMessage'),
-        })
-      }
+      const base = latestOf(chore)
+      const updated = withoutBlock(base, index)
 
-      replaceChore(updated)
+      await showOptimistic(updated)
       try {
-        const saved = await updateChore({
-          ...updated,
-          labelsV2: updated.labelsV2 ?? [],
-        })
+        const saved = await persist(updated)
         showSuccess({
           message: saved?._pendingUpdate
             ? t('planner.offlineSaved')
             : t('planner.blockRemoved'),
           undoAction: async () => {
-            const latest =
-              queryClient
-                .getQueryData<ChoresData>(ACTIVE_CHORES_KEY)
-                ?.res?.find(c => c.id === chore.id) ?? updated
+            const beforeUndo = latestOf(chore)
             const restored: PlannerChore = {
-              ...latest,
-              notification: chore.notification,
-              notificationMetadata: chore.notificationMetadata,
+              ...beforeUndo,
+              notification: base.notification,
+              notificationMetadata: base.notificationMetadata,
             }
-            replaceChore(restored)
+            await showOptimistic(restored)
             try {
-              await updateChore({
-                ...restored,
-                labelsV2: restored.labelsV2 ?? [],
-              })
+              await persist(restored)
             } catch {
-              failed(updated)
+              replaceChore(beforeUndo)
+              showFailure()
             }
           },
         })
       } catch {
-        failed(chore)
+        replaceChore(base)
+        showFailure()
       }
     },
-    [queryClient, replaceChore, showError, showSuccess, t, updateChore],
+    [
+      latestOf,
+      persist,
+      replaceChore,
+      showFailure,
+      showOptimistic,
+      showSuccess,
+      t,
+    ],
   )
 
   return { removeBlock, saveBlock }

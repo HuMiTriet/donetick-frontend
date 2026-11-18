@@ -44,6 +44,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 
 import AppModal from '../../components/common/AppModal'
+import { useReturnTo } from '../../hooks/useReturnTo'
 import LABEL_COLORS, {
   getTextColorFromBackgroundColor,
 } from '../../utils/Colors'
@@ -131,6 +132,7 @@ const ChoreActionMenu = ({
   const menuRef = React.useRef(null)
   const submenuRef = React.useRef(null)
   const navigate = useNavigate()
+  const { returnState } = useReturnTo()
   const { data: projects = [] } = useProjects()
   // Phone-only condition (matches AddTaskModal.jsx) — tablets/desktop keep the Menu
   const isSmallScreen = useMediaQuery(theme => theme.breakpoints.down('sm'))
@@ -217,7 +219,7 @@ const ChoreActionMenu = ({
   }
 
   const handleEdit = () => {
-    navigate(`/chores/${chore.id}/edit`)
+    navigate(`/chores/${chore.id}/edit`, { state: returnState })
     handleMenuClose()
   }
 

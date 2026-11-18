@@ -49,6 +49,7 @@ import {
   useInlineSubTaskEditor,
 } from '../../hooks/useInlineSubTaskEditor'
 import { usePendingCommands } from '../../hooks/usePendingCommands'
+import { useReturnTo } from '../../hooks/useReturnTo'
 import {
   useChoreDetails,
   useChoreHistory,
@@ -238,6 +239,7 @@ const ChoreView = () => {
   const { fmt } = useLocalization()
   const [chore, setChore] = useState<ChoreViewData>({})
   const navigate = useNavigate()
+  const { returnState } = useReturnTo()
   const [performers, setPerformers] = useState<CircleMember[]>([])
   const [infoCards, setInfoCards] = useState<InfoCard[]>([])
   const { choreId } = useParams()
@@ -1168,7 +1170,7 @@ const ChoreView = () => {
               p: 1,
             }}
             onClick={() => {
-              navigate(`/chores/${choreId}/edit`)
+              navigate(`/chores/${choreId}/edit`, { state: returnState })
             }}
           >
             <Edit />
