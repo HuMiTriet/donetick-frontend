@@ -1,13 +1,16 @@
 import { Draggable } from '@fullcalendar/react/interaction'
 import { Box, Chip, Sheet, Typography } from '@mui/joy'
-import PropTypes from 'prop-types'
+import type { TFunction } from 'i18next'
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { getPriorityColor } from '../../utils/Colors'
+import type { ChoreGroup, PlannerChore } from './timeBlocks'
 import { blockSeconds } from './timeBlocks'
 
-const formatDuration = (seconds, t) => {
+type SelectChore = (id: number | null) => void
+
+const formatDuration = (seconds: number, t: TFunction) => {
   const minutes = Math.round(seconds / 60)
   const hours = Math.floor(minutes / 60)
   const rest = minutes % 60
@@ -17,7 +20,12 @@ const formatDuration = (seconds, t) => {
   return t('planner.duration.minutes', { minutes })
 }
 
-const Dot = ({ color, size = 8 }) => (
+type DotProps = {
+  color: string
+  size?: number
+}
+
+const Dot = ({ color, size = 8 }: DotProps) => (
   <Box
     sx={{
       width: size,
@@ -29,12 +37,21 @@ const Dot = ({ color, size = 8 }) => (
   />
 )
 
-Dot.propTypes = {
-  color: PropTypes.string.isRequired,
-  size: PropTypes.number,
+type TaskItemProps = {
+  chore: PlannerChore
+  compact?: boolean
+  groupColor: string
+  selected: boolean
+  onSelect: SelectChore
 }
 
-const TaskItem = ({ chore, compact, groupColor, onSelect, selected }) => {
+const TaskItem = ({
+  chore,
+  compact,
+  groupColor,
+  onSelect,
+  selected,
+}: TaskItemProps) => {
   const { t } = useTranslation('chores')
   const seconds = blockSeconds(chore)
   const common = {
@@ -85,15 +102,14 @@ const TaskItem = ({ chore, compact, groupColor, onSelect, selected }) => {
   )
 }
 
-TaskItem.propTypes = {
-  chore: PropTypes.object.isRequired,
-  compact: PropTypes.bool,
-  groupColor: PropTypes.string.isRequired,
-  selected: PropTypes.bool,
-  onSelect: PropTypes.func.isRequired,
+type SectionProps = {
+  compact?: boolean
+  group: ChoreGroup
+  selectedId: number | null
+  onSelect: SelectChore
 }
 
-const Section = ({ compact, group, onSelect, selectedId }) => {
+const Section = ({ compact, group, onSelect, selectedId }: SectionProps) => {
   const items = group.content.map(chore => (
     <TaskItem
       key={chore.id}
@@ -104,7 +120,7 @@ const Section = ({ compact, group, onSelect, selectedId }) => {
       onSelect={onSelect}
     />
   ))
-  if (compact) return items
+  if (compact) return <>{items}</>
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -118,29 +134,30 @@ const Section = ({ compact, group, onSelect, selectedId }) => {
   )
 }
 
-Section.propTypes = {
-  compact: PropTypes.bool,
-  group: PropTypes.shape({
-    name: PropTypes.string.isRequired,
-    color: PropTypes.string.isRequired,
-    content: PropTypes.array.isRequired,
-  }).isRequired,
-  selectedId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
-  onSelect: PropTypes.func.isRequired,
+type PlannerTaskListProps = {
+  compact?: boolean
+  groups: ChoreGroup[]
+  selectedId: number | null
+  onSelect: SelectChore
 }
 
-const PlannerTaskList = ({ compact, groups, onSelect, selectedId }) => {
+const PlannerTaskList = ({
+  compact,
+  groups,
+  onSelect,
+  selectedId,
+}: PlannerTaskListProps) => {
   const { t } = useTranslation('chores')
-  const containerRef = useRef(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!containerRef.current) return undefined
     const draggable = new Draggable(containerRef.current, {
       itemSelector: '[data-chore-id]',
       longPressDelay: 300,
-      eventData: el => ({
-        title: el.dataset.title,
-        duration: { seconds: Number(el.dataset.duration) },
+      eventData: (el: HTMLElement) => ({
+        title: el.dataset['title'],
+        duration: { seconds: Number(el.dataset['duration']) },
         create: false,
       }),
     })
@@ -179,13 +196,6 @@ const PlannerTaskList = ({ compact, groups, onSelect, selectedId }) => {
       )}
     </Box>
   )
-}
-
-PlannerTaskList.propTypes = {
-  compact: PropTypes.bool,
-  groups: PropTypes.arrayOf(PropTypes.object).isRequired,
-  selectedId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
-  onSelect: PropTypes.func.isRequired,
 }
 
 export default PlannerTaskList

@@ -1,3 +1,4 @@
+import type { ViewApi } from '@fullcalendar/react'
 import { useCalendarController } from '@fullcalendar/react'
 import { ChevronLeft, ChevronRight } from '@mui/icons-material'
 import {
@@ -10,6 +11,7 @@ import {
   Typography,
 } from '@mui/joy'
 import { useMediaQuery } from '@mui/material'
+import type { Theme } from '@mui/material/styles'
 import moment from 'moment'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -20,10 +22,15 @@ import { useUserProfile } from '../../queries/UserQueries'
 import { ChoresGrouper, GROUPING_OPTIONS } from '../../utils/Chores'
 import PlannerTaskList from './PlannerTaskList'
 import TimeBlockCalendar from './TimeBlockCalendar'
+import type {
+  ChoreGroup,
+  PlannerChore,
+  PlannerView as View,
+} from './timeBlocks'
 import { blockSeconds, isMine } from './timeBlocks'
 import { useTimeBlockActions } from './useTimeBlockActions'
 
-const formatRangeTitle = view => {
+const formatRangeTitle = (view?: ViewApi) => {
   if (!view) return ''
   const start = moment(view.currentStart)
   if (view.type === 'timeGridDay') return start.format('dddd, MMM D')
@@ -36,16 +43,26 @@ const formatRangeTitle = view => {
 const PlannerView = () => {
   const { t } = useTranslation('chores')
   const navigate = useNavigate()
-  const isDesktop = useMediaQuery(theme => theme.breakpoints.up('md'), {
-    noSsr: true,
-  })
+  const isDesktop = useMediaQuery(
+    (theme: Theme) => theme.breakpoints.up('md'),
+    {
+      noSsr: true,
+    },
+  )
   const controller = useCalendarController()
-  const [initialView] = useState(isDesktop ? 'timeGridWeek' : 'timeGridDay')
-  const [view, setView] = useState(initialView)
-  const [scope, setScope] = useState('mine')
-  const [selectedId, setSelectedId] = useState(null)
-  const { data, isLoading } = useChores()
-  const { data: userProfile } = useUserProfile()
+  const [initialView] = useState<View>(
+    isDesktop ? 'timeGridWeek' : 'timeGridDay',
+  )
+  const [view, setView] = useState<View>(initialView)
+  const [scope, setScope] = useState<'mine' | 'all'>('mine')
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const { data, isLoading } = useChores() as {
+    data?: { res?: PlannerChore[] }
+    isLoading: boolean
+  }
+  const { data: userProfile } = useUserProfile() as {
+    data?: { id: number }
+  }
   const { saveBlock } = useTimeBlockActions()
 
   const chores = useMemo(() => {
@@ -59,16 +76,16 @@ const PlannerView = () => {
       ChoresGrouper(
         GROUPING_OPTIONS.SMART,
         chores.filter(chore => !chore._pendingCreate),
-      ),
+      ) as ChoreGroup[],
     [chores],
   )
 
-  const changeView = next => {
+  const changeView = (next: View) => {
     setView(next)
     controller.changeView(next)
   }
 
-  const handleSlotClick = date => {
+  const handleSlotClick = (date: Date) => {
     if (selectedId === null) return
     const chore = chores.find(c => c.id === selectedId)
     setSelectedId(null)

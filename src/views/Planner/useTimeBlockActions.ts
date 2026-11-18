@@ -6,11 +6,13 @@ import { PAYWALL_REASON, usePaywall } from '../../contexts/PaywallContext'
 import { useUpdateChore } from '../../queries/ChoreQueries'
 import { useNotification } from '../../service/NotificationProvider'
 import type { Chore } from '../../types/models'
+import type { SaveBlock } from './TimeBlockCalendar'
+import type { PlannerChore } from './timeBlocks'
 import { withBlockAt } from './timeBlocks'
 
 type ChoresData = { res?: Chore[] } | undefined
 
-type SavedChore = Chore & { _pendingUpdate?: boolean }
+type SavedChore = PlannerChore & { _pendingUpdate?: boolean }
 
 type Notify = (notification: { message?: string; title?: string }) => void
 
@@ -24,7 +26,7 @@ export const useTimeBlockActions = () => {
     showPaywall: (reason: string) => void
   }
   const { mutateAsync: updateChore } = useUpdateChore() as unknown as {
-    mutateAsync: (chore: Chore) => Promise<SavedChore>
+    mutateAsync: (chore: PlannerChore) => Promise<SavedChore>
   }
   const { showError, showSuccess } = useNotification() as {
     showError: Notify
@@ -42,9 +44,9 @@ export const useTimeBlockActions = () => {
     [queryClient],
   )
 
-  const saveBlock = useCallback(
+  const saveBlock: SaveBlock = useCallback(
     async (
-      chore: Chore,
+      chore: PlannerChore,
       end: Date,
       seconds: number,
       index?: number,
@@ -55,7 +57,7 @@ export const useTimeBlockActions = () => {
         showPaywall(PAYWALL_REASON.ADVANCED_REMINDERS)
         return
       }
-      const updated = withBlockAt(chore, end, seconds, index) as Chore | null
+      const updated = withBlockAt(chore, end, seconds, index)
       if (!updated) {
         revert?.()
         showError({ message: t('planner.mustEndBeforeDue') })

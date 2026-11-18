@@ -1,13 +1,18 @@
 import '@fullcalendar/react/skeleton.css'
 import '@fullcalendar/react/themes/classic/theme.css'
 
+import type {
+  CalendarController,
+  DropInfo,
+  EventDropInfo,
+  EventResizeDoneInfo,
+} from '@fullcalendar/react'
 import FullCalendar from '@fullcalendar/react'
 import interactionPlugin from '@fullcalendar/react/interaction'
 import classicThemePlugin from '@fullcalendar/react/themes/classic'
 import timeGridPlugin from '@fullcalendar/react/timegrid'
 import { Box, Tooltip, Typography } from '@mui/joy'
 import moment from 'moment'
-import PropTypes from 'prop-types'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -18,17 +23,35 @@ import {
 import { priorityOrder } from '../../utils/Chores'
 import { getPriorityColor } from '../../utils/Colors'
 import styles from './TimeBlockCalendar.module.css'
+import type {
+  BlockEventProps,
+  DueMarkerProps,
+  PlannerChore,
+  PlannerView,
+} from './timeBlocks'
 import { blockSeconds, choreToEvents, dueMarkers } from './timeBlocks'
 
 const PLUGINS = [timeGridPlugin, interactionPlugin, classicThemePlugin]
 
-const DueLine = ({ dueChores, hour12, onChoreClick }) => {
+type Localization = {
+  firstDayOfWeek: number
+  isRTL: boolean
+  timeFormat: string
+}
+
+type DueLineProps = {
+  dueChores: PlannerChore[]
+  hour12: boolean
+  onChoreClick: (chore: PlannerChore) => void
+}
+
+const DueLine = ({ dueChores, hour12, onChoreClick }: DueLineProps) => {
   const { t } = useTranslation('chores')
-  const time = moment(dueChores[0].nextDueDate).format(
+  const time = moment(dueChores[0]?.nextDueDate).format(
     hour12 ? 'h:mm A' : 'HH:mm',
   )
   const topPriority = Math.min(
-    ...dueChores.map(chore => priorityOrder.indexOf(chore.priority ?? 0)),
+    ...dueChores.map(chore => priorityOrder.indexOf(chore.priority)),
   )
   const color = getPriorityColor(priorityOrder[topPriority])
   return (
@@ -50,22 +73,34 @@ const DueLine = ({ dueChores, hour12, onChoreClick }) => {
       }
     >
       <div
-        className={styles.dueHit}
+        className={styles['dueHit']}
         data-due-line
         onClick={() => {
-          if (dueChores.length === 1) onChoreClick(dueChores[0])
+          const [only] = dueChores
+          if (dueChores.length === 1 && only) onChoreClick(only)
         }}
       >
-        <div className={styles.dueLine} style={{ backgroundColor: color }} />
+        <div className={styles['dueLine']} style={{ backgroundColor: color }} />
       </div>
     </Tooltip>
   )
 }
 
-DueLine.propTypes = {
-  dueChores: PropTypes.array.isRequired,
-  hour12: PropTypes.bool.isRequired,
-  onChoreClick: PropTypes.func.isRequired,
+export type SaveBlock = (
+  chore: PlannerChore,
+  end: Date,
+  seconds: number,
+  index?: number,
+  revert?: () => void,
+) => void
+
+type TimeBlockCalendarProps = {
+  chores: PlannerChore[]
+  controller: CalendarController
+  initialView: PlannerView
+  onChoreClick: (chore: PlannerChore) => void
+  onSave: SaveBlock
+  onSlotClick: (date: Date) => void
 }
 
 const TimeBlockCalendar = ({
@@ -75,8 +110,9 @@ const TimeBlockCalendar = ({
   onChoreClick,
   onSave,
   onSlotClick,
-}) => {
-  const { firstDayOfWeek, isRTL, timeFormat } = useLocalization()
+}: TimeBlockCalendarProps) => {
+  const { firstDayOfWeek, isRTL, timeFormat } =
+    useLocalization() as Localization
   const hour12 = timeFormat === TIME_FORMATS.HOUR_12
 
   const choresById = useMemo(
@@ -94,14 +130,15 @@ const TimeBlockCalendar = ({
     [],
   )
 
-  const handleChange = info => {
-    const { choreId, templateIndex } = info.event.extendedProps
+  const handleChange = (info: EventDropInfo | EventResizeDoneInfo) => {
+    const { choreId, templateIndex } = info.event
+      .extendedProps as BlockEventProps
     const chore = choresById.get(String(choreId))
-    if (!chore) {
+    const { end, start } = info.event
+    if (!chore || !start || !end) {
       info.revert()
       return
     }
-    const { end, start } = info.event
     onSave(
       chore,
       end,
@@ -111,15 +148,15 @@ const TimeBlockCalendar = ({
     )
   }
 
-  const handleDrop = info => {
-    const chore = choresById.get(info.draggedEl.dataset.choreId)
+  const handleDrop = (info: DropInfo) => {
+    const chore = choresById.get(info.draggedEl.dataset['choreId'] ?? '')
     if (!chore) return
     const seconds = blockSeconds(chore)
     onSave(chore, new Date(info.date.getTime() + seconds * 1000), seconds)
   }
 
   return (
-    <div className={styles.calendar}>
+    <div className={styles['calendar']}>
       <FullCalendar
         plugins={PLUGINS}
         controller={controller}
@@ -143,13 +180,14 @@ const TimeBlockCalendar = ({
         drop={handleDrop}
         dateClick={info => onSlotClick(info.date)}
         eventClick={info => {
-          const chore = choresById.get(String(info.event.extendedProps.choreId))
+          const { choreId } = info.event.extendedProps as BlockEventProps
+          const chore = choresById.get(String(choreId))
           if (chore) onChoreClick(chore)
         }}
-        backgroundEventClass={styles.dueMarker}
+        backgroundEventClass={styles['dueMarker']}
         backgroundEventContent={arg => (
           <DueLine
-            dueChores={arg.event.extendedProps.dueChores}
+            dueChores={(arg.event.extendedProps as DueMarkerProps).dueChores}
             hour12={hour12}
             onChoreClick={onChoreClick}
           />
@@ -165,15 +203,6 @@ const TimeBlockCalendar = ({
       />
     </div>
   )
-}
-
-TimeBlockCalendar.propTypes = {
-  chores: PropTypes.array.isRequired,
-  controller: PropTypes.object.isRequired,
-  initialView: PropTypes.oneOf(['timeGridDay', 'timeGridWeek']).isRequired,
-  onChoreClick: PropTypes.func.isRequired,
-  onSave: PropTypes.func.isRequired,
-  onSlotClick: PropTypes.func.isRequired,
 }
 
 export default TimeBlockCalendar
