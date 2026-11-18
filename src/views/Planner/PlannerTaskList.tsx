@@ -58,6 +58,7 @@ const TaskItem = ({
     'data-chore-id': chore.id,
     'data-title': chore.name,
     'data-duration': seconds,
+    'data-color': getPriorityColor(chore.priority),
     onClick: () => onSelect(selected ? null : chore.id),
   }
 
@@ -158,6 +159,7 @@ const PlannerTaskList = ({
       eventData: (el: HTMLElement) => ({
         title: el.dataset['title'],
         duration: { seconds: Number(el.dataset['duration']) },
+        color: el.dataset['color'],
         create: false,
       }),
     })

@@ -6,15 +6,19 @@ import { PAYWALL_REASON, usePaywall } from '../../contexts/PaywallContext'
 import { useUpdateChore } from '../../queries/ChoreQueries'
 import { useNotification } from '../../service/NotificationProvider'
 import type { Chore } from '../../types/models'
-import type { SaveBlock } from './TimeBlockCalendar'
+import type { RemoveBlock, SaveBlock } from './TimeBlockCalendar'
 import type { PlannerChore } from './timeBlocks'
-import { withBlockAt } from './timeBlocks'
+import { withBlockAt, withoutBlock } from './timeBlocks'
 
 type ChoresData = { res?: Chore[] } | undefined
 
 type SavedChore = PlannerChore & { _pendingUpdate?: boolean }
 
-type Notify = (notification: { message?: string; title?: string }) => void
+type Notify = (notification: {
+  message?: string
+  title?: string
+  undoAction?: () => Promise<void>
+}) => void
 
 const ACTIVE_CHORES_KEY = ['chores', false]
 
@@ -85,5 +89,54 @@ export const useTimeBlockActions = () => {
     [isPlus, replaceChore, showError, showPaywall, showSuccess, t, updateChore],
   )
 
-  return { saveBlock }
+  const removeBlock: RemoveBlock = useCallback(
+    async (chore: PlannerChore, index: number) => {
+      const updated = withoutBlock(chore, index)
+      const failed = (restore: PlannerChore) => {
+        replaceChore(restore)
+        showError({
+          title: t('actions.failRescheduleTitle'),
+          message: t('actions.failRescheduleMessage'),
+        })
+      }
+
+      replaceChore(updated)
+      try {
+        const saved = await updateChore({
+          ...updated,
+          labelsV2: updated.labelsV2 ?? [],
+        })
+        showSuccess({
+          message: saved?._pendingUpdate
+            ? t('planner.offlineSaved')
+            : t('planner.blockRemoved'),
+          undoAction: async () => {
+            const latest =
+              queryClient
+                .getQueryData<ChoresData>(ACTIVE_CHORES_KEY)
+                ?.res?.find(c => c.id === chore.id) ?? updated
+            const restored: PlannerChore = {
+              ...latest,
+              notification: chore.notification,
+              notificationMetadata: chore.notificationMetadata,
+            }
+            replaceChore(restored)
+            try {
+              await updateChore({
+                ...restored,
+                labelsV2: restored.labelsV2 ?? [],
+              })
+            } catch {
+              failed(updated)
+            }
+          },
+        })
+      } catch {
+        failed(chore)
+      }
+    },
+    [queryClient, replaceChore, showError, showSuccess, t, updateChore],
+  )
+
+  return { removeBlock, saveBlock }
 }

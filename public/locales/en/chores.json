@@ -1170,8 +1170,10 @@
     "allPlanned": "All clear!",
     "tapToPlace": "Tap a time on the calendar.",
     "dueAt": "Due {{time}}",
+    "dropToRemove": "Drop here to remove",
+    "blockRemoved": "Block removed",
     "mustEndBeforeDue": "A block has to end before the task's due time.",
-    "offlineSaved": "Offline, cannot save.",
+    "offlineSaved": "Offline, will save when online.",
     "duration": {
       "minutes": "{{minutes}}m",
       "hours": "{{hours}}h",

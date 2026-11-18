@@ -4,6 +4,7 @@ import '@fullcalendar/react/themes/classic/theme.css'
 import type {
   CalendarController,
   DropInfo,
+  EventDragStopInfo,
   EventDropInfo,
   EventResizeDoneInfo,
 } from '@fullcalendar/react'
@@ -11,9 +12,10 @@ import FullCalendar from '@fullcalendar/react'
 import interactionPlugin from '@fullcalendar/react/interaction'
 import classicThemePlugin from '@fullcalendar/react/themes/classic'
 import timeGridPlugin from '@fullcalendar/react/timegrid'
-import { Box, Tooltip, Typography } from '@mui/joy'
+import { DeleteOutline } from '@mui/icons-material'
+import { Box, Sheet, Tooltip, Typography } from '@mui/joy'
 import moment from 'moment'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -32,6 +34,28 @@ import type {
 import { blockSeconds, choreToEvents, dueMarkers } from './timeBlocks'
 
 const PLUGINS = [timeGridPlugin, interactionPlugin, classicThemePlugin]
+
+type Point = { x: number; y: number }
+
+const pointOf = (event: MouseEvent | TouchEvent): Point | null => {
+  if ('changedTouches' in event) {
+    const touch = event.changedTouches[0]
+    return touch ? { x: touch.clientX, y: touch.clientY } : null
+  }
+  return { x: event.clientX, y: event.clientY }
+}
+
+const contains = (el: HTMLElement | null, point: Point | null) => {
+  const rect = el?.getBoundingClientRect()
+  return Boolean(
+    point &&
+    rect &&
+    point.x >= rect.left &&
+    point.x <= rect.right &&
+    point.y >= rect.top &&
+    point.y <= rect.bottom,
+  )
+}
 
 type Localization = {
   firstDayOfWeek: number
@@ -94,11 +118,14 @@ export type SaveBlock = (
   revert?: () => void,
 ) => void
 
+export type RemoveBlock = (chore: PlannerChore, index: number) => void
+
 type TimeBlockCalendarProps = {
   chores: PlannerChore[]
   controller: CalendarController
   initialView: PlannerView
   onChoreClick: (chore: PlannerChore) => void
+  onRemove: RemoveBlock
   onSave: SaveBlock
   onSlotClick: (date: Date) => void
 }
@@ -108,9 +135,11 @@ const TimeBlockCalendar = ({
   controller,
   initialView,
   onChoreClick,
+  onRemove,
   onSave,
   onSlotClick,
 }: TimeBlockCalendarProps) => {
+  const { t } = useTranslation('chores')
   const { firstDayOfWeek, isRTL, timeFormat } =
     useLocalization() as Localization
   const hour12 = timeFormat === TIME_FORMATS.HOUR_12
@@ -148,6 +177,51 @@ const TimeBlockCalendar = ({
     )
   }
 
+  const trashRef = useRef<HTMLDivElement>(null)
+  const removingId = useRef<string | null>(null)
+  const stopTracking = useRef<(() => void) | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const [overTrash, setOverTrash] = useState(false)
+
+  useEffect(() => () => stopTracking.current?.(), [])
+
+  const handleDragStart = () => {
+    removingId.current = null
+    setDragging(true)
+    const track = (event: PointerEvent | TouchEvent) =>
+      setOverTrash(contains(trashRef.current, pointOf(event)))
+    document.addEventListener('pointermove', track)
+    document.addEventListener('touchmove', track, { passive: true })
+    stopTracking.current = () => {
+      document.removeEventListener('pointermove', track)
+      document.removeEventListener('touchmove', track)
+    }
+  }
+
+  const handleDragStop = (info: EventDragStopInfo) => {
+    stopTracking.current?.()
+    stopTracking.current = null
+    const dropped = contains(trashRef.current, pointOf(info.jsEvent))
+    setDragging(false)
+    setOverTrash(false)
+    if (!dropped) return
+    const { choreId, templateIndex } = info.event
+      .extendedProps as BlockEventProps
+    const chore = choresById.get(String(choreId))
+    if (!chore) return
+    removingId.current = info.event.id
+    onRemove(chore, templateIndex)
+  }
+
+  const handleMove = (info: EventDropInfo) => {
+    if (removingId.current === info.event.id) {
+      removingId.current = null
+      info.revert()
+      return
+    }
+    handleChange(info)
+  }
+
   const handleDrop = (info: DropInfo) => {
     const chore = choresById.get(info.draggedEl.dataset['choreId'] ?? '')
     if (!chore) return
@@ -165,6 +239,13 @@ const TimeBlockCalendar = ({
         height='100%'
         allDaySlot={false}
         nowIndicator
+        nowIndicatorLineClass={styles['nowLine']}
+        nowIndicatorHeaderClass={styles['nowHeader']}
+        nowIndicatorHeaderContent={arg => (
+          <span className={styles['nowPill']}>
+            {moment(arg.date).format(hour12 ? 'h:mm' : 'HH:mm')}
+          </span>
+        )}
         editable
         droppable
         eventResizableFromStart
@@ -175,7 +256,9 @@ const TimeBlockCalendar = ({
         direction={isRTL ? 'rtl' : 'ltr'}
         longPressDelay={300}
         events={events}
-        eventDrop={handleChange}
+        eventDragStart={handleDragStart}
+        eventDragStop={handleDragStop}
+        eventDrop={handleMove}
         eventResize={handleChange}
         drop={handleDrop}
         dateClick={info => onSlotClick(info.date)}
@@ -201,6 +284,34 @@ const TimeBlockCalendar = ({
         }}
         eventTimeFormat={{ hour: 'numeric', minute: '2-digit', hour12 }}
       />
+      {dragging && (
+        <Sheet
+          ref={trashRef}
+          variant={overTrash ? 'solid' : 'soft'}
+          color='danger'
+          sx={{
+            position: 'fixed',
+            insetInline: 0,
+            bottom: 0,
+            height: 'calc(88px + var(--safe-area-inset-bottom, 0px))',
+            pb: 'var(--safe-area-inset-bottom, 0px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 1,
+            borderTop: '1px solid',
+            borderColor: 'danger.outlinedBorder',
+            zIndex: 'var(--joy-zIndex-modal)',
+            pointerEvents: 'none',
+          }}
+          data-remove-zone
+        >
+          <DeleteOutline />
+          <Typography level='title-sm' textColor='inherit'>
+            {t('planner.dropToRemove')}
+          </Typography>
+        </Sheet>
+      )}
     </div>
   )
 }

@@ -63,7 +63,7 @@ const PlannerView = () => {
   const { data: userProfile } = useUserProfile() as {
     data?: { id: number }
   }
-  const { saveBlock } = useTimeBlockActions()
+  const { removeBlock, saveBlock } = useTimeBlockActions()
 
   const chores = useMemo(() => {
     const all = data?.res ?? []
@@ -207,6 +207,7 @@ const PlannerView = () => {
           chores={chores}
           controller={controller}
           initialView={initialView}
+          onRemove={removeBlock}
           onSave={saveBlock}
           onSlotClick={handleSlotClick}
           onChoreClick={chore => navigate(`/chores/${chore.id}`)}

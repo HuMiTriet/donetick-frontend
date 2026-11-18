@@ -114,6 +114,22 @@ export const withBlockAt = (
   }
 }
 
+export const withoutBlock = (
+  chore: PlannerChore,
+  index: number,
+): PlannerChore => {
+  const templates = templatesOf(chore).filter((_, i) => i !== index)
+  return {
+    ...chore,
+    notification: chore.notification && templates.length > 0,
+    notificationMetadata: {
+      circleGroupID: null,
+      ...chore.notificationMetadata,
+      templates,
+    },
+  }
+}
+
 export const dueMarkers = (chores: PlannerChore[]): EventInput[] => {
   const byInstant = new Map<number, PlannerChore[]>()
   for (const chore of chores) {
