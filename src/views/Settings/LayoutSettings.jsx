@@ -11,6 +11,7 @@ import {
   SettingsOutlined,
   SpaceDashboard,
   Toll,
+  ViewTimeline,
   Widgets,
 } from '@mui/icons-material'
 import {
@@ -64,6 +65,7 @@ const ICONS = {
   FilterAlt: <FilterAlt />,
   History: <History />,
   Toll: <Toll />,
+  ViewTimeline: <ViewTimeline />,
   SettingsOutlined: <SettingsOutlined />,
 }
 

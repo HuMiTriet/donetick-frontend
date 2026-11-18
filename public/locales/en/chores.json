@@ -1158,5 +1158,24 @@
     "inheritedFromSharedProject": "Inherited from the project: only its members can see tasks in it",
     "onlyProjectAudienceAssignable": "Only people who can see the project “{{project}}” can be assigned.",
     "followsProjectName": "Follows the project “{{project}}”"
+  },
+  "planner": {
+    "mine": "Mine",
+    "everyone": "Everyone",
+    "day": "Day",
+    "week": "Week",
+    "today": "Today",
+    "previous": "Previous",
+    "next": "Next",
+    "allPlanned": "All clear!",
+    "tapToPlace": "Tap a time on the calendar.",
+    "dueAt": "Due {{time}}",
+    "mustEndBeforeDue": "A block has to end before the task's due time.",
+    "offlineSaved": "Offline, cannot save.",
+    "duration": {
+      "minutes": "{{minutes}}m",
+      "hours": "{{hours}}h",
+      "hoursMinutes": "{{hours}}h {{minutes}}m"
+    }
   }
 }

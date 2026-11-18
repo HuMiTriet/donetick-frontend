@@ -15,6 +15,7 @@ import {
   SettingsOutlined,
   SpaceDashboard,
   Toll,
+  ViewTimeline,
   Widgets,
 } from '@mui/icons-material'
 import {
@@ -140,6 +141,11 @@ const NavBar = () => {
       to: '/chores',
       label: t('navigation.allTasks'),
       icon: <Checklist />,
+    },
+    {
+      to: '/planner',
+      label: t('navigation.planner'),
+      icon: <ViewTimeline />,
     },
     {
       to: '/archived',

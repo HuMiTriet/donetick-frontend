@@ -1,0 +1,65 @@
+.calendar {
+  --fc-classic-button: var(--joy-palette-neutral-solidBg);
+  --fc-classic-button-border: var(--joy-palette-neutral-solidBg);
+  --fc-classic-button-strong: var(--joy-palette-neutral-solidHoverBg);
+  --fc-classic-button-strong-border: var(--joy-palette-neutral-solidHoverBg);
+  --fc-classic-button-outline: var(--joy-palette-focusVisible);
+  --fc-classic-button-foreground: var(--joy-palette-neutral-solidColor);
+
+  --fc-classic-primary: var(--joy-palette-primary-solidBg);
+  --fc-classic-primary-foreground: var(--joy-palette-primary-solidColor);
+
+  --fc-classic-event: var(--fc-classic-primary);
+  --fc-classic-event-contrast: var(--fc-classic-primary-foreground);
+  --fc-classic-background-event: var(--joy-palette-success-solidBg);
+  --fc-classic-background-event-opacity: 15%;
+  --fc-classic-background-event-foreground-opacity: 50%;
+  --fc-classic-highlight: var(--joy-palette-primary-softBg);
+  --fc-classic-today: color-mix(
+    in srgb,
+    var(--joy-palette-primary-500) 4%,
+    transparent
+  );
+  --fc-classic-now: var(--joy-palette-danger-solidBg);
+  --fc-classic-ring-color: var(--joy-palette-focusVisible);
+  --fc-classic-small-dot-width: 8px;
+  --fc-classic-large-dot-width: 10px;
+
+  --fc-classic-background: var(--joy-palette-background-surface);
+  --fc-classic-faint: var(--joy-palette-background-level1);
+  --fc-classic-muted: var(--joy-palette-background-level2);
+  --fc-classic-strong: var(--joy-palette-background-level3);
+
+  --fc-classic-foreground: var(--joy-palette-text-primary);
+  --fc-classic-faint-foreground: var(--joy-palette-text-tertiary);
+  --fc-classic-muted-foreground: var(--joy-palette-text-secondary);
+
+  --fc-classic-border: var(--joy-palette-divider);
+  --fc-classic-strong-border: var(--joy-palette-neutral-outlinedBorder);
+
+  height: 100%;
+  font-family: inherit;
+  font-size: 0.875rem;
+}
+
+.dueMarker {
+  background: transparent !important;
+  overflow: visible !important;
+  z-index: 4;
+}
+
+.dueHit {
+  position: absolute;
+  inset-inline: 0;
+  top: -5px;
+  height: 10px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.dueLine {
+  width: 100%;
+  height: 2px;
+}

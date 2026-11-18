@@ -17,6 +17,13 @@ export const BOTTOM_NAV_ITEM_POOL = [
     translationDefault: 'Tasks',
   },
   {
+    id: 'planner',
+    to: '/planner',
+    iconName: 'ViewTimeline',
+    translationKey: 'navigation.planner',
+    translationDefault: 'Planner',
+  },
+  {
     id: 'search',
     action: 'search',
     iconName: 'SearchRounded',

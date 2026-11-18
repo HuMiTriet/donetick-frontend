@@ -41,6 +41,7 @@ import OnboardingView from '../views/Onboarding/OnboardingView'
 import WorkspaceReadyView from '../views/Onboarding/WorkspaceReadyView'
 import PaymentCancelledView from '../views/Payments/PaymentFailView'
 import PaymentSuccessView from '../views/Payments/PaymentSuccessView'
+import PlannerView from '../views/Planner/PlannerView'
 import PrivacyPolicyView from '../views/PrivacyPolicy/PrivacyPolicyView'
 import ProjectView from '../views/Projects/ProjectView'
 import APITokenSettings from '../views/Settings/APITokenSettings'
@@ -195,6 +196,10 @@ const Router = createBrowserRouter([
       {
         path: '/my/chores',
         element: <MyChores />,
+      },
+      {
+        path: '/planner',
+        element: <PlannerView />,
       },
       {
         path: '/activities',

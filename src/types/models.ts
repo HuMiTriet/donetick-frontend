@@ -124,6 +124,7 @@ export type Chore = {
   status: ChoreStatus
   priority: number
   completionWindow?: number | null
+  estimatedDuration?: number | null
   deadlineOffset?: number | null
   points?: number | null
   description?: string | null
