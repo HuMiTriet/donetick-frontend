@@ -53,9 +53,7 @@ const PlannerView = () => {
     },
   )
   const controller = useCalendarController()
-  const [initialView] = useState<View>(
-    isDesktop ? 'timeGridWeek' : 'timeGridDay',
-  )
+  const [initialView] = useState<View>('timeGridDay')
   const [view, setView] = useState<View>(initialView)
   const [scope, setScope] = useState<'mine' | 'all'>('mine')
   const [selectedId, setSelectedId] = useState<number | null>(null)
