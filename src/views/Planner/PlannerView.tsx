@@ -94,7 +94,7 @@ const PlannerView = () => {
     setSelectedId(null)
     if (!chore) return
     const seconds = blockSeconds(chore)
-    saveBlock(chore, new Date(date.getTime() + seconds * 1000), seconds)
+    saveBlock(chore, date, seconds)
   }
 
   if (isLoading) {

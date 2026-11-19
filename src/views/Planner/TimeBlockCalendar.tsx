@@ -31,7 +31,12 @@ import type {
   PlannerChore,
   PlannerView,
 } from './timeBlocks'
-import { blockSeconds, choreToEvents, dueMarkers } from './timeBlocks'
+import {
+  blockSeconds,
+  choreToEvents,
+  dueMarkers,
+  SLOT_MINUTES,
+} from './timeBlocks'
 
 const PLUGINS = [timeGridPlugin, interactionPlugin, classicThemePlugin]
 
@@ -112,7 +117,7 @@ const DueLine = ({ dueChores, hour12, onChoreClick }: DueLineProps) => {
 
 export type SaveBlock = (
   chore: PlannerChore,
-  end: Date,
+  start: Date,
   seconds: number,
   index?: number,
   revert?: () => void,
@@ -170,7 +175,7 @@ const TimeBlockCalendar = ({
     }
     onSave(
       chore,
-      end,
+      start,
       Math.round((end.getTime() - start.getTime()) / 1000),
       templateIndex,
       info.revert,
@@ -226,7 +231,7 @@ const TimeBlockCalendar = ({
     const chore = choresById.get(info.draggedEl.dataset['choreId'] ?? '')
     if (!chore) return
     const seconds = blockSeconds(chore)
-    onSave(chore, new Date(info.date.getTime() + seconds * 1000), seconds)
+    onSave(chore, info.date, seconds)
   }
 
   return (
@@ -249,7 +254,7 @@ const TimeBlockCalendar = ({
         editable
         droppable
         eventResizableFromStart
-        slotDuration='00:15'
+        slotDuration={{ minutes: SLOT_MINUTES }}
         slotHeaderInterval='01:00'
         scrollTime={scrollTime}
         firstDay={firstDayOfWeek}

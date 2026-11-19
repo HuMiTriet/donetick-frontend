@@ -1172,7 +1172,7 @@
     "dueAt": "Due {{time}}",
     "dropToRemove": "Drop here to remove",
     "blockRemoved": "Block removed",
-    "mustEndBeforeDue": "A block has to end before the task's due time.",
+    "mustEndBeforeDue": "Must end before due time.",
     "offlineSaved": "Offline, will save when online.",
     "duration": {
       "minutes": "{{minutes}}m",

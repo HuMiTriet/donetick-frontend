@@ -34,6 +34,11 @@ const UNIT_MS: Record<string, number> = {
   d: 24 * 60 * MINUTE_MS,
 }
 
+export const SLOT_MINUTES = 15
+const SLOT_MS = SLOT_MINUTES * MINUTE_MS
+
+const snapToSlot = (ms: number): number => Math.round(ms / SLOT_MS) * SLOT_MS
+
 export const blockSeconds = (chore: Chore): number => {
   const seconds = chore.estimatedDuration
   return seconds && seconds > 0 ? seconds : DEFAULT_BLOCK_SECONDS
@@ -55,12 +60,12 @@ const templatesOf = (chore: Chore): NotificationTemplate[] =>
 
 export const choreToEvents = (chore: PlannerChore): EventInput[] => {
   if (!chore.nextDueDate) return []
-  const due = new Date(chore.nextDueDate).getTime()
-  const length = blockSeconds(chore) * 1000
+  const due = snapToSlot(new Date(chore.nextDueDate).getTime())
+  const duration = blockSeconds(chore) * 1000
   return templatesOf(chore).flatMap((template, index) => {
     const offset = offsetMs(template)
     if (!(offset < 0)) return []
-    const end = new Date(due + offset)
+    const start = new Date(due + offset)
     const extendedProps: BlockEventProps = {
       choreId: chore.id,
       templateIndex: index,
@@ -68,8 +73,8 @@ export const choreToEvents = (chore: PlannerChore): EventInput[] => {
     return {
       id: `${chore.id}:${index}`,
       title: chore.name,
-      start: new Date(end.getTime() - length),
-      end,
+      start,
+      end: new Date(start.getTime() + duration),
       color: getPriorityColor(chore.priority),
       editable: !chore._pendingCreate,
       extendedProps,
@@ -77,21 +82,20 @@ export const choreToEvents = (chore: PlannerChore): EventInput[] => {
   })
 }
 
-const endOfDay = (date: Date): Date => {
-  const day = new Date(date)
-  day.setHours(23, 59, 0, 0)
-  return day
-}
-
 export const withBlockAt = (
   chore: PlannerChore,
-  end: Date,
+  start: Date,
   seconds: number,
   index?: number,
 ): PlannerChore | null => {
-  const due = chore.nextDueDate ? new Date(chore.nextDueDate) : endOfDay(end)
-  if (end.getTime() >= due.getTime()) return null
-  const template = toTemplate(end.getTime() - due.getTime())
+  const endOfDay = new Date(start)
+  endOfDay.setHours(23, 59, 59, 0)
+  const dueDate = chore.nextDueDate ? new Date(chore.nextDueDate) : endOfDay
+  const due = snapToSlot(dueDate.getTime())
+  const blockStart = snapToSlot(start.getTime())
+  const length = Math.max(SLOT_MS, snapToSlot(seconds * 1000))
+  if (blockStart + length > due) return null
+  const template = toTemplate(blockStart - due)
   const templates = [...templatesOf(chore)]
   if (index !== undefined) {
     templates[index] = template
@@ -101,8 +105,8 @@ export const withBlockAt = (
   return {
     ...chore,
     ...(!chore.nextDueDate && {
-      dueDate: due.toISOString(),
-      nextDueDate: due.toISOString(),
+      dueDate: dueDate.toISOString(),
+      nextDueDate: dueDate.toISOString(),
     }),
     notification: true,
     notificationMetadata: {
@@ -110,7 +114,7 @@ export const withBlockAt = (
       ...chore.notificationMetadata,
       templates,
     },
-    estimatedDuration: seconds,
+    estimatedDuration: length / 1000,
   }
 }
 

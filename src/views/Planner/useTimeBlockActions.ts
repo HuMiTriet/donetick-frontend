@@ -126,7 +126,7 @@ export const useTimeBlockActions = () => {
   const saveBlock: SaveBlock = useCallback(
     async (
       chore: PlannerChore,
-      end: Date,
+      start: Date,
       seconds: number,
       index?: number,
       revert?: () => void,
@@ -137,7 +137,7 @@ export const useTimeBlockActions = () => {
         return
       }
       const base = latestOf(chore)
-      const updated = withBlockAt(base, end, seconds, index)
+      const updated = withBlockAt(base, start, seconds, index)
       if (!updated) {
         revert?.()
         showError({ message: t('planner.mustEndBeforeDue') })
