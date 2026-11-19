@@ -35,6 +35,7 @@ import {
   blockSeconds,
   choreToEvents,
   dueMarkers,
+  formatDuration,
   SLOT_MINUTES,
 } from './timeBlocks'
 
@@ -267,6 +268,18 @@ const TimeBlockCalendar = ({
         eventResize={handleChange}
         drop={handleDrop}
         dateClick={info => onSlotClick(info.date)}
+        eventContent={arg => {
+          const { end, start } = arg.event
+          const seconds =
+            start && end ? (end.getTime() - start.getTime()) / 1000 : 0
+          return (
+            <>
+              <div className={arg.timeClass}>{arg.timeText}</div>
+              <div className={arg.timeClass}>{formatDuration(seconds, t)}</div>
+              <div className={arg.titleClass}>{arg.event.title}</div>
+            </>
+          )
+        }}
         eventClick={info => {
           const { choreId } = info.event.extendedProps as BlockEventProps
           const chore = choresById.get(String(choreId))

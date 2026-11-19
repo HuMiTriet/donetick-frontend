@@ -1,4 +1,5 @@
 import type { EventInput } from '@fullcalendar/react'
+import type { TFunction } from 'i18next'
 
 import type { Chore, NotificationTemplate } from '../../types/models'
 import { getPriorityColor } from '../../utils/Colors'
@@ -42,6 +43,16 @@ const snapToSlot = (ms: number): number => Math.round(ms / SLOT_MS) * SLOT_MS
 export const blockSeconds = (chore: Chore): number => {
   const seconds = chore.estimatedDuration
   return seconds && seconds > 0 ? seconds : DEFAULT_BLOCK_SECONDS
+}
+
+export const formatDuration = (seconds: number, t: TFunction): string => {
+  const minutes = Math.round(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  if (hours && rest)
+    return t('planner.duration.hoursMinutes', { hours, minutes: rest })
+  if (hours) return t('planner.duration.hours', { hours })
+  return t('planner.duration.minutes', { minutes })
 }
 
 export const offsetMs = (template: NotificationTemplate): number =>

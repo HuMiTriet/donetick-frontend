@@ -1,27 +1,16 @@
 import { Draggable } from '@fullcalendar/react/interaction'
 import { Box, Chip, Sheet, Typography } from '@mui/joy'
-import type { TFunction } from 'i18next'
 import type { PointerEvent } from 'react'
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { getPriorityColor } from '../../utils/Colors'
 import type { ChoreGroup, PlannerChore } from './timeBlocks'
-import { blockSeconds } from './timeBlocks'
+import { blockSeconds, formatDuration } from './timeBlocks'
 
 type ItemClick = (chore: PlannerChore) => void
 
 const CLICK_SLOP_PX = 6
-
-const formatDuration = (seconds: number, t: TFunction) => {
-  const minutes = Math.round(seconds / 60)
-  const hours = Math.floor(minutes / 60)
-  const rest = minutes % 60
-  if (hours && rest)
-    return t('planner.duration.hoursMinutes', { hours, minutes: rest })
-  if (hours) return t('planner.duration.hours', { hours })
-  return t('planner.duration.minutes', { minutes })
-}
 
 type DotProps = {
   color: string
