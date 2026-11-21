@@ -53,14 +53,7 @@ function getInternalValue(timing, displayValue) {
   return Math.abs(displayValue)
 }
 
-const NotificationTemplate = ({
-  maxNotifications = 5,
-  // ChoreEdit owns the on/off state and must retain at least one reminder.
-  // Consumers with their own empty state can pass 0.
-  minNotifications = 1,
-  onChange,
-  value,
-}) => {
+const NotificationTemplate = ({ minNotifications = 1, onChange, value }) => {
   const { t } = useTranslation('chores')
   const { isPlanKnown, isPlus, showPaywall } = usePaywall()
   const [notifications, setNotifications] = useState(() =>
@@ -173,7 +166,6 @@ const NotificationTemplate = ({
   }
 
   const addSmartNotification = type => {
-    if (notificationsRef.current.length >= maxNotifications) return
     if (type !== 'due' && !requirePlus()) return
 
     let newNotification
@@ -210,7 +202,6 @@ const NotificationTemplate = ({
   }
 
   const hasDueReminder = notifications.some(item => Number(item.value) === 0)
-  const hasReachedLimit = notifications.length >= maxNotifications
 
   return (
     <Box>
@@ -374,7 +365,6 @@ const NotificationTemplate = ({
         {!hasDueReminder && (
           <Button
             onClick={() => addSmartNotification('due')}
-            disabled={hasReachedLimit}
             startDecorator={<AddIcon />}
             size='sm'
             variant='soft'
@@ -384,7 +374,6 @@ const NotificationTemplate = ({
         )}
         <Button
           onClick={() => addSmartNotification('reminder')}
-          disabled={hasReachedLimit}
           startDecorator={<AddIcon />}
           size='sm'
           variant='outlined'
@@ -394,7 +383,6 @@ const NotificationTemplate = ({
         </Button>
         <Button
           onClick={() => addSmartNotification('followup')}
-          disabled={hasReachedLimit}
           startDecorator={<AddIcon />}
           size='sm'
           variant='outlined'

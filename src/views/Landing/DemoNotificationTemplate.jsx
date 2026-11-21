@@ -25,7 +25,6 @@ const DemoNotificationTemplate = () => {
           <NotificationTemplate
             value={{ templates: demoNotifications }}
             onChange={handleNotificationChange}
-            maxNotifications={5}
             showTimeline={false}
           />
         </div>
