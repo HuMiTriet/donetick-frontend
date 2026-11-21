@@ -287,8 +287,9 @@ const TimeBlockCalendar = ({
           )
           return (
             <>
-              <div className={arg.timeClass}>{arg.timeText}</div>
-              <div className={arg.timeClass}>{formatDuration(seconds, t)}</div>
+              <div className={arg.timeClass}>
+                {arg.timeText} · {formatDuration(seconds, t)}
+              </div>
               <div className={arg.titleClass}>{arg.event.title}</div>
               {overdueChore && (
                 <div className={styles['overdueTag']}>

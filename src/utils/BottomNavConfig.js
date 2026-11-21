@@ -92,7 +92,7 @@ export const BOTTOM_NAV_ITEM_POOL = [
 // this many slots are user-configurable.
 export const MAX_BOTTOM_NAV_ITEMS = 4
 
-const DEFAULT_ENABLED_IDS = ['home', 'tasks', 'search']
+const DEFAULT_ENABLED_IDS = ['tasks', 'planner', 'search']
 
 export const DEFAULT_BOTTOM_NAV_CONFIG = BOTTOM_NAV_ITEM_POOL.map(
   (item, index) => ({
