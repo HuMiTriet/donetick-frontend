@@ -26,7 +26,7 @@ export type DueMarkerProps = {
   dueChores: PlannerChore[]
 }
 
-export const DEFAULT_BLOCK_SECONDS = 30 * 60
+export const DEFAULT_BLOCK_SECONDS = 15 * 60
 
 const MINUTE_MS = 60 * 1000
 const UNIT_MS: Record<string, number> = {
@@ -38,7 +38,7 @@ const UNIT_MS: Record<string, number> = {
 export const SLOT_MINUTES = 15
 const SLOT_MS = SLOT_MINUTES * MINUTE_MS
 
-const snapToSlot = (ms: number): number => Math.round(ms / SLOT_MS) * SLOT_MS
+const roundToSlot = (ms: number): number => Math.round(ms / SLOT_MS) * SLOT_MS
 
 export const blockSeconds = (chore: Chore): number => {
   const seconds = chore.estimatedDuration
@@ -69,13 +69,17 @@ export const toTemplate = (ms: number): NotificationTemplate => {
 const templatesOf = (chore: Chore): NotificationTemplate[] =>
   chore.notificationMetadata?.templates ?? []
 
+const isOverDue = (chore: Chore): Boolean =>
+  Boolean(chore.nextDueDate) &&
+  Date.now() > new Date(chore.nextDueDate as string).getTime()
+
 export const choreToEvents = (chore: PlannerChore): EventInput[] => {
   if (!chore.nextDueDate) return []
-  const due = snapToSlot(new Date(chore.nextDueDate).getTime())
+  const due = roundToSlot(new Date(chore.nextDueDate).getTime())
   const duration = blockSeconds(chore) * 1000
   return templatesOf(chore).flatMap((template, index) => {
     const offset = offsetMs(template)
-    if (!(offset < 0)) return []
+    if (!(offset < 0 || (isOverDue(chore) && offset > 0))) return []
     const start = new Date(due + offset)
     const extendedProps: BlockEventProps = {
       choreId: chore.id,
@@ -102,10 +106,13 @@ export const withBlockAt = (
   const endOfDay = new Date(start)
   endOfDay.setHours(23, 59, 59, 0)
   const dueDate = chore.nextDueDate ? new Date(chore.nextDueDate) : endOfDay
-  const due = snapToSlot(dueDate.getTime())
-  const blockStart = snapToSlot(start.getTime())
-  const length = Math.max(SLOT_MS, snapToSlot(seconds * 1000))
-  if (blockStart + length > due) return null
+  const due = roundToSlot(dueDate.getTime())
+  const blockStart = roundToSlot(start.getTime())
+  const length = Math.max(SLOT_MS, roundToSlot(seconds * 1000))
+
+  if (isOverDue(chore) ? blockStart === due : blockStart + length > due)
+    return null
+
   const template = toTemplate(blockStart - due)
   const templates = [...templatesOf(chore)]
   if (index !== undefined) {
