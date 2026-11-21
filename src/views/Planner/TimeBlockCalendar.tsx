@@ -36,6 +36,7 @@ import {
   choreToEvents,
   dueMarkers,
   formatDuration,
+  isOverDue,
   SLOT_MINUTES,
 } from './timeBlocks'
 
@@ -155,6 +156,11 @@ const TimeBlockCalendar = ({
     [chores],
   )
 
+  const getOverdueChore = ({ choreId }: BlockEventProps) => {
+    const chore = choresById.get(String(choreId))
+    return chore && isOverDue(chore) ? chore : undefined
+  }
+
   const events = useMemo(
     () => [...chores.flatMap(choreToEvents), ...dueMarkers(chores)],
     [chores],
@@ -268,15 +274,29 @@ const TimeBlockCalendar = ({
         eventResize={handleChange}
         drop={handleDrop}
         dateClick={info => onSlotClick(info.date)}
+        eventClass={arg =>
+          getOverdueChore(arg.event.extendedProps as BlockEventProps) &&
+          styles['overdueBlock']
+        }
         eventContent={arg => {
           const { end, start } = arg.event
           const seconds =
             start && end ? (end.getTime() - start.getTime()) / 1000 : 0
+          const overdueChore = getOverdueChore(
+            arg.event.extendedProps as BlockEventProps,
+          )
           return (
             <>
               <div className={arg.timeClass}>{arg.timeText}</div>
               <div className={arg.timeClass}>{formatDuration(seconds, t)}</div>
               <div className={arg.titleClass}>{arg.event.title}</div>
+              {overdueChore && (
+                <div className={styles['overdueTag']}>
+                  {t('planner.overdueBy', {
+                    time: moment(overdueChore.nextDueDate).fromNow(true),
+                  })}
+                </div>
+              )}
             </>
           )
         }}

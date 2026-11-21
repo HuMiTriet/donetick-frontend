@@ -1,12 +1,13 @@
 import { Draggable } from '@fullcalendar/react/interaction'
 import { Box, Chip, Sheet, Typography } from '@mui/joy'
+import moment from 'moment'
 import type { PointerEvent } from 'react'
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { getPriorityColor } from '../../utils/Colors'
 import type { ChoreGroup, PlannerChore } from './timeBlocks'
-import { blockSeconds, formatDuration } from './timeBlocks'
+import { blockSeconds, formatDuration, isOverDue } from './timeBlocks'
 
 type ItemClick = (chore: PlannerChore) => void
 
@@ -46,6 +47,11 @@ const TaskItem = ({
 }: TaskItemProps) => {
   const { t } = useTranslation('chores')
   const seconds = blockSeconds(chore)
+  const overdue = isOverDue(chore)
+  const overdueLabel = overdue
+    ? t('planner.overdueBy', { time: moment(chore.nextDueDate).fromNow(true) })
+    : null
+  const color = selected ? 'primary' : overdue ? 'danger' : 'neutral'
   const dragged = useRef(false)
   const common = {
     'data-chore-id': chore.id,
@@ -83,8 +89,15 @@ const TaskItem = ({
       <Chip
         {...common}
         variant={selected ? 'solid' : 'soft'}
-        color={selected ? 'primary' : 'neutral'}
+        color={color}
         startDecorator={<Dot color={groupColor} />}
+        endDecorator={
+          overdueLabel && (
+            <Typography level='body-xs' textColor='inherit' fontWeight='lg'>
+              {overdueLabel}
+            </Typography>
+          )
+        }
         sx={{ flexShrink: 0, cursor: 'grab', touchAction: 'pan-x' }}
       >
         {chore.name}
@@ -96,7 +109,7 @@ const TaskItem = ({
     <Sheet
       {...common}
       variant={selected ? 'soft' : 'outlined'}
-      color={selected ? 'primary' : 'neutral'}
+      color={color}
       sx={{
         display: 'flex',
         alignItems: 'center',
@@ -109,9 +122,16 @@ const TaskItem = ({
       }}
     >
       <Dot color={getPriorityColor(chore.priority)} />
-      <Typography level='body-sm' noWrap sx={{ flex: 1 }}>
-        {chore.name}
-      </Typography>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography level='body-sm' noWrap>
+          {chore.name}
+        </Typography>
+        {overdueLabel && (
+          <Typography level='body-xs' color='danger' fontWeight='lg'>
+            {overdueLabel}
+          </Typography>
+        )}
+      </Box>
       <Typography level='body-xs' color='neutral'>
         {formatDuration(seconds, t)}
       </Typography>

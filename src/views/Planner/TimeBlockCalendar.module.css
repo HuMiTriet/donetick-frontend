@@ -10,7 +10,7 @@
   --fc-classic-primary-foreground: var(--joy-palette-primary-solidColor);
 
   --fc-classic-event: var(--fc-classic-primary);
-  --fc-classic-event-contrast: var(--fc-classic-primary-foreground);
+  --fc-classic-event-contrast: var(--joy-palette-common-black);
   --fc-classic-background-event: var(--joy-palette-success-solidBg);
   --fc-classic-background-event-opacity: 15%;
   --fc-classic-background-event-foreground-opacity: 50%;
@@ -37,6 +37,8 @@
   --fc-classic-border: var(--joy-palette-divider);
   --fc-classic-strong-border: var(--joy-palette-neutral-outlinedBorder);
 
+  --overdue-yellow: #f9c222;
+
   height: 100%;
   font-family: inherit;
   font-size: 0.875rem;
@@ -62,6 +64,20 @@
 .dueLine {
   width: 100%;
   height: 2px;
+}
+
+.overdueBlock {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--overdue-yellow) 70%, transparent) 0 6px,
+    transparent 6px 14px
+  );
+}
+
+.overdueTag {
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .nowLine {

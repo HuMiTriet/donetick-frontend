@@ -1170,6 +1170,7 @@
     "allPlanned": "All clear!",
     "tapToPlace": "Tap a time on the calendar.",
     "dueAt": "Due {{time}}",
+    "overdueBy": "{{time}} overdue",
     "dropToRemove": "Drop here to remove",
     "blockRemoved": "Block removed",
     "mustEndBeforeDue": "Must end before due time.",

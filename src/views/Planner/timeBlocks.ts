@@ -26,7 +26,7 @@ export type DueMarkerProps = {
   dueChores: PlannerChore[]
 }
 
-export const DEFAULT_BLOCK_SECONDS = 15 * 60
+export const DEFAULT_BLOCK_SECONDS = 30 * 60
 
 const MINUTE_MS = 60 * 1000
 const UNIT_MS: Record<string, number> = {
@@ -69,9 +69,12 @@ export const toTemplate = (ms: number): NotificationTemplate => {
 const templatesOf = (chore: Chore): NotificationTemplate[] =>
   chore.notificationMetadata?.templates ?? []
 
-const isOverDue = (chore: Chore): Boolean =>
+export const isOverDue = (chore: Chore): boolean =>
   Boolean(chore.nextDueDate) &&
   Date.now() > new Date(chore.nextDueDate as string).getTime()
+
+const isOffsetValid = (chore: Chore, offset: number): boolean =>
+  offset < 0 || (isOverDue(chore) && offset > 0)
 
 export const choreToEvents = (chore: PlannerChore): EventInput[] => {
   if (!chore.nextDueDate) return []
@@ -79,7 +82,7 @@ export const choreToEvents = (chore: PlannerChore): EventInput[] => {
   const duration = blockSeconds(chore) * 1000
   return templatesOf(chore).flatMap((template, index) => {
     const offset = offsetMs(template)
-    if (!(offset < 0 || (isOverDue(chore) && offset > 0))) return []
+    if (!isOffsetValid(chore, offset)) return []
     const start = new Date(due + offset)
     const extendedProps: BlockEventProps = {
       choreId: chore.id,
@@ -174,7 +177,7 @@ export const dueMarkers = (chores: PlannerChore[]): EventInput[] => {
 
 export const hasBlock = (chore: Chore): boolean =>
   Boolean(chore.nextDueDate) &&
-  templatesOf(chore).some(template => offsetMs(template) < 0)
+  templatesOf(chore).some(template => isOffsetValid(chore, offsetMs(template)))
 
 export const isMine = (chore: Chore, userId: number): boolean =>
   !chore.assignedTo || chore.assignedTo === userId
