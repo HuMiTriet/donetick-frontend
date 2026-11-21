@@ -197,6 +197,7 @@ const PlannerTaskList = ({
         duration: { seconds: Number(el.dataset['duration']) },
         color: el.dataset['color'],
         create: false,
+        extendedProps: { choreId: Number(el.dataset['choreId']) },
       }),
     })
     return () => draggable.destroy()

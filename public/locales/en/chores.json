@@ -1167,7 +1167,7 @@
     "today": "Today",
     "previous": "Previous",
     "next": "Next",
-    "allPlanned": "All clear!",
+    "allPlanned": "Nothing to plan.",
     "tapToPlace": "Tap a time on the calendar.",
     "dueAt": "Due {{time}}",
     "overdueBy": "{{time}} overdue",

@@ -117,10 +117,16 @@ export const withBlockAt = (
     return null
 
   const template = toTemplate(blockStart - due)
-  const templates = [...templatesOf(chore)]
-  if (index !== undefined) {
-    templates[index] = template
-  } else if (!templates.some(t => offsetMs(t) === offsetMs(template))) {
+  const startOfTodayTime = new Date().setHours(0, 0, 0, 0)
+  const templates = templatesOf(chore).filter((t, i) => {
+    const offset = offsetMs(t)
+    const isOldOverDueBlock =
+      isOverDue(chore) &&
+      isOffsetValid(chore, offset) &&
+      due + offset < startOfTodayTime
+    return i !== index && !isOldOverDueBlock
+  })
+  if (!templates.some(t => offsetMs(t) === offsetMs(template))) {
     templates.push(template)
   }
   return {
@@ -175,9 +181,18 @@ export const dueMarkers = (chores: PlannerChore[]): EventInput[] => {
   })
 }
 
-export const hasBlock = (chore: Chore): boolean =>
-  Boolean(chore.nextDueDate) &&
-  templatesOf(chore).some(template => isOffsetValid(chore, offsetMs(template)))
+export const hasBlock = (chore: Chore): boolean => {
+  if (!chore.nextDueDate) return false
+  const due = roundToSlot(new Date(chore.nextDueDate).getTime())
+  const startOfToday = new Date().setHours(0, 0, 0, 0)
+  return templatesOf(chore).some(template => {
+    const offset = offsetMs(template)
+    return (
+      isOffsetValid(chore, offset) &&
+      (!isOverDue(chore) || due + offset >= startOfToday)
+    )
+  })
+}
 
 export const isMine = (chore: Chore, userId: number): boolean =>
   !chore.assignedTo || chore.assignedTo === userId
