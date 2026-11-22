@@ -64,7 +64,7 @@ const PlannerView = () => {
   const { data: userProfile } = useUserProfile() as {
     data?: { id: number }
   }
-  const { removeBlock, saveBlock } = useTimeBlockActions()
+  const { removeBlock, saveBlocks } = useTimeBlockActions()
 
   const chores = useMemo(() => {
     const all = data?.res ?? []
@@ -91,8 +91,7 @@ const PlannerView = () => {
     const chore = chores.find(c => c.id === selectedId)
     setSelectedId(null)
     if (!chore) return
-    const seconds = blockSeconds(chore)
-    saveBlock(chore, date, seconds)
+    saveBlocks([{ chore, start: date, seconds: blockSeconds(chore) }])
   }
 
   if (isLoading) {
@@ -211,7 +210,7 @@ const PlannerView = () => {
           controller={controller}
           initialView={initialView}
           onRemove={removeBlock}
-          onSave={saveBlock}
+          onSave={saveBlocks}
           onSlotClick={handleSlotClick}
           onChoreClick={chore =>
             navigate(`/chores/${chore.id}`, { state: FROM_PLANNER })

@@ -27,6 +27,7 @@ import { getPriorityColor } from '../../utils/Colors'
 import styles from './TimeBlockCalendar.module.css'
 import type {
   BlockEventProps,
+  BlockMove,
   DueMarkerProps,
   PlannerChore,
   PlannerView,
@@ -35,8 +36,10 @@ import {
   blockSeconds,
   choreToEvents,
   dueMarkers,
+  endsPastDue,
   formatDuration,
   isOverDue,
+  pushBlocksBelow,
   SLOT_MINUTES,
 } from './timeBlocks'
 
@@ -117,13 +120,7 @@ const DueLine = ({ dueChores, hour12, onChoreClick }: DueLineProps) => {
   )
 }
 
-export type SaveBlock = (
-  chore: PlannerChore,
-  start: Date,
-  seconds: number,
-  index?: number,
-  revert?: () => void,
-) => void
+export type SaveBlocks = (moves: BlockMove[], revert?: () => void) => void
 
 export type RemoveBlock = (chore: PlannerChore, index: number) => void
 
@@ -133,7 +130,7 @@ type TimeBlockCalendarProps = {
   initialView: PlannerView
   onChoreClick: (chore: PlannerChore) => void
   onRemove: RemoveBlock
-  onSave: SaveBlock
+  onSave: SaveBlocks
   onSlotClick: (date: Date) => void
 }
 
@@ -156,9 +153,11 @@ const TimeBlockCalendar = ({
     [chores],
   )
 
-  const getOverdueChore = ({ choreId }: BlockEventProps) => {
+  const getOverdueChore = ({ choreId }: BlockEventProps, end: Date | null) => {
     const chore = choresById.get(String(choreId))
-    return chore && isOverDue(chore) ? chore : undefined
+    const overdue =
+      chore && (isOverDue(chore) || (end && endsPastDue(chore, end)))
+    return overdue ? chore : undefined
   }
 
   const events = useMemo(
@@ -171,22 +170,30 @@ const TimeBlockCalendar = ({
     [],
   )
 
-  const handleChange = (info: EventDropInfo | EventResizeDoneInfo) => {
-    const { choreId, templateIndex } = info.event
-      .extendedProps as BlockEventProps
+  const movedBlock = (
+    info: EventDropInfo | EventResizeDoneInfo,
+  ): BlockMove | null => {
+    const { choreId } = info.event.extendedProps as BlockEventProps
     const chore = choresById.get(String(choreId))
     const { end, start } = info.event
-    if (!chore || !start || !end) {
+    const from = info.oldEvent.start
+    if (!chore || !start || !end || !from) return null
+    return {
+      chore,
+      start,
+      seconds: Math.round((end.getTime() - start.getTime()) / 1000),
+      from,
+    }
+  }
+
+  const handleResize = (info: EventResizeDoneInfo) => {
+    const move = movedBlock(info)
+    const oldEnd = info.oldEvent.end
+    if (!move || !oldEnd) {
       info.revert()
       return
     }
-    onSave(
-      chore,
-      start,
-      Math.round((end.getTime() - start.getTime()) / 1000),
-      templateIndex,
-      info.revert,
-    )
+    onSave(pushBlocksBelow(chores, move, oldEnd), info.revert)
   }
 
   const trashRef = useRef<HTMLDivElement>(null)
@@ -231,14 +238,18 @@ const TimeBlockCalendar = ({
       info.revert()
       return
     }
-    handleChange(info)
+    const move = movedBlock(info)
+    if (!move) {
+      info.revert()
+      return
+    }
+    onSave([move], info.revert)
   }
 
   const handleDrop = (info: DropInfo) => {
     const chore = choresById.get(info.draggedEl.dataset['choreId'] ?? '')
     if (!chore) return
-    const seconds = blockSeconds(chore)
-    onSave(chore, info.date, seconds)
+    onSave([{ chore, start: info.date, seconds: blockSeconds(chore) }])
   }
 
   return (
@@ -271,12 +282,14 @@ const TimeBlockCalendar = ({
         eventDragStart={handleDragStart}
         eventDragStop={handleDragStop}
         eventDrop={handleMove}
-        eventResize={handleChange}
+        eventResize={handleResize}
         drop={handleDrop}
         dateClick={info => onSlotClick(info.date)}
         eventClass={arg =>
-          getOverdueChore(arg.event.extendedProps as BlockEventProps) &&
-          styles['overdueBlock']
+          getOverdueChore(
+            arg.event.extendedProps as BlockEventProps,
+            arg.event.end,
+          ) && styles['overdueBlock']
         }
         eventContent={arg => {
           const { end, start } = arg.event
@@ -284,6 +297,7 @@ const TimeBlockCalendar = ({
             start && end ? (end.getTime() - start.getTime()) / 1000 : 0
           const overdueChore = getOverdueChore(
             arg.event.extendedProps as BlockEventProps,
+            end,
           )
           return (
             <>
@@ -294,7 +308,9 @@ const TimeBlockCalendar = ({
               {overdueChore && (
                 <div className={styles['overdueTag']}>
                   {t('planner.overdueBy', {
-                    time: moment(overdueChore.nextDueDate).fromNow(true),
+                    time: isOverDue(overdueChore)
+                      ? moment(overdueChore.nextDueDate).fromNow(true)
+                      : moment(overdueChore.nextDueDate).from(end, true),
                   })}
                 </div>
               )}

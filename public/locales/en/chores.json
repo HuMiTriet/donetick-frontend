@@ -1173,7 +1173,8 @@
     "overdueBy": "{{time}} overdue",
     "dropToRemove": "Drop here to remove",
     "blockRemoved": "Block removed",
-    "mustEndBeforeDue": "Must end before due time.",
+    "cantStartAtDue": "Can't start exactly at due time.",
+    "scheduledPastDue": "Scheduled past due date.",
     "offlineSaved": "Offline, will save when online.",
     "duration": {
       "minutes": "{{minutes}}m",

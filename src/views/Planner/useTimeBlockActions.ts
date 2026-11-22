@@ -7,9 +7,15 @@ import { useUpdateChore } from '../../queries/ChoreQueries'
 import { useNotification } from '../../service/NotificationProvider'
 import type { Chore } from '../../types/models'
 import { GetChoreByID } from '../../utils/Fetcher'
-import type { RemoveBlock, SaveBlock } from './TimeBlockCalendar'
-import type { PlannerChore } from './timeBlocks'
-import { withBlockAt, withoutBlock } from './timeBlocks'
+import type { RemoveBlock, SaveBlocks } from './TimeBlockCalendar'
+import type { BlockEventProps, PlannerChore } from './timeBlocks'
+import {
+  choreToEvents,
+  endsPastDue,
+  isOverDue,
+  withBlockAt,
+  withoutBlock,
+} from './timeBlocks'
 
 type ChoresData = { res?: Chore[] } | undefined
 
@@ -23,6 +29,14 @@ type Notify = (notification: {
 
 const ACTIVE_CHORES_KEY = ['chores', false]
 
+const blockIndexAt = (chore: PlannerChore, start?: Date) => {
+  if (!start) return undefined
+  const block = choreToEvents(chore).find(
+    event => (event.start as Date).getTime() === start.getTime(),
+  )
+  return (block?.extendedProps as BlockEventProps | undefined)?.templateIndex
+}
+
 export const useTimeBlockActions = () => {
   const { t } = useTranslation('chores')
   const queryClient = useQueryClient()
@@ -33,9 +47,10 @@ export const useTimeBlockActions = () => {
   const { mutateAsync: updateChore } = useUpdateChore() as unknown as {
     mutateAsync: (chore: PlannerChore) => Promise<SavedChore>
   }
-  const { showError, showSuccess } = useNotification() as {
+  const { showError, showSuccess, showWarning } = useNotification() as {
     showError: Notify
     showSuccess: Notify
+    showWarning: Notify
   }
 
   const queues = useRef(new Map<number, Promise<void>>())
@@ -123,35 +138,50 @@ export const useTimeBlockActions = () => {
     [showError, t],
   )
 
-  const saveBlock: SaveBlock = useCallback(
-    async (
-      chore: PlannerChore,
-      start: Date,
-      seconds: number,
-      index?: number,
-      revert?: () => void,
-    ) => {
+  const saveBlocks: SaveBlocks = useCallback(
+    async (moves, revert) => {
       if (!isPlus) {
         revert?.()
         showPaywall(PAYWALL_REASON.ADVANCED_REMINDERS)
         return
       }
-      const base = latestOf(chore)
-      const updated = withBlockAt(base, start, seconds, index)
-      if (!updated) {
-        revert?.()
-        showError({ message: t('planner.mustEndBeforeDue') })
-        return
+      const bases = new Map<number, PlannerChore>()
+      const updates = new Map<number, PlannerChore>()
+      for (const { chore, from, remove, seconds, start } of moves) {
+        const base = bases.get(chore.id) ?? latestOf(chore)
+        bases.set(chore.id, base)
+        const current = updates.get(chore.id) ?? base
+        const index = blockIndexAt(current, from)
+        if (remove) {
+          if (index !== undefined) {
+            updates.set(chore.id, withoutBlock(current, index))
+          }
+          continue
+        }
+        const updated = withBlockAt(current, start, seconds, index)
+        if (!updated) {
+          revert?.()
+          showError({ message: t('planner.cantStartAtDue') })
+          return
+        }
+        updates.set(chore.id, updated)
       }
+      const pastDue = moves.some(
+        ({ chore, remove, seconds, start }) =>
+          !remove &&
+          !isOverDue(chore) &&
+          endsPastDue(chore, new Date(start.getTime() + seconds * 1000)),
+      )
+      if (pastDue) showWarning({ message: t('planner.scheduledPastDue') })
 
-      await showOptimistic(updated)
+      await Promise.all([...updates.values()].map(showOptimistic))
       try {
-        const saved = await persist(updated)
-        if (saved?._pendingUpdate) {
+        const saved = await Promise.all([...updates.values()].map(persist))
+        if (saved.some(chore => chore?._pendingUpdate)) {
           showSuccess({ message: t('planner.offlineSaved') })
         }
       } catch {
-        replaceChore(base)
+        bases.forEach(base => replaceChore(base))
         revert?.()
         showFailure()
       }
@@ -166,6 +196,7 @@ export const useTimeBlockActions = () => {
       showOptimistic,
       showPaywall,
       showSuccess,
+      showWarning,
       t,
     ],
   )
@@ -214,5 +245,5 @@ export const useTimeBlockActions = () => {
     ],
   )
 
-  return { removeBlock, saveBlock }
+  return { removeBlock, saveBlocks }
 }

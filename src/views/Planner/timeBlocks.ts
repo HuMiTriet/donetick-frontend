@@ -26,6 +26,14 @@ export type DueMarkerProps = {
   dueChores: PlannerChore[]
 }
 
+export type BlockMove = {
+  chore: PlannerChore
+  start: Date
+  seconds: number
+  from?: Date
+  remove?: boolean
+}
+
 export const DEFAULT_BLOCK_SECONDS = 30 * 60
 
 const MINUTE_MS = 60 * 1000
@@ -73,8 +81,11 @@ export const isOverDue = (chore: Chore): boolean =>
   Boolean(chore.nextDueDate) &&
   Date.now() > new Date(chore.nextDueDate as string).getTime()
 
-const isOffsetValid = (chore: Chore, offset: number): boolean =>
-  offset < 0 || (isOverDue(chore) && offset > 0)
+const isOffsetValid = (offset: number): boolean => offset !== 0
+
+export const endsPastDue = (chore: Chore, end: Date): boolean =>
+  Boolean(chore.nextDueDate) &&
+  end.getTime() > roundToSlot(new Date(chore.nextDueDate as string).getTime())
 
 export const choreToEvents = (chore: PlannerChore): EventInput[] => {
   if (!chore.nextDueDate) return []
@@ -82,7 +93,7 @@ export const choreToEvents = (chore: PlannerChore): EventInput[] => {
   const duration = blockSeconds(chore) * 1000
   return templatesOf(chore).flatMap((template, index) => {
     const offset = offsetMs(template)
-    if (!isOffsetValid(chore, offset)) return []
+    if (!isOffsetValid(offset)) return []
     const start = new Date(due + offset)
     const extendedProps: BlockEventProps = {
       choreId: chore.id,
@@ -113,8 +124,7 @@ export const withBlockAt = (
   const blockStart = roundToSlot(start.getTime())
   const length = Math.max(SLOT_MS, roundToSlot(seconds * 1000))
 
-  if (isOverDue(chore) ? blockStart === due : blockStart + length > due)
-    return null
+  if (blockStart === due) return null
 
   const template = toTemplate(blockStart - due)
   const startOfTodayTime = new Date().setHours(0, 0, 0, 0)
@@ -122,7 +132,7 @@ export const withBlockAt = (
     const offset = offsetMs(t)
     const isOldOverDueBlock =
       isOverDue(chore) &&
-      isOffsetValid(chore, offset) &&
+      isOffsetValid(offset) &&
       due + offset < startOfTodayTime
     return i !== index && !isOldOverDueBlock
   })
@@ -161,6 +171,54 @@ export const withoutBlock = (
   }
 }
 
+export const pushBlocksBelow = (
+  chores: PlannerChore[],
+  resized: BlockMove,
+  oldEnd: Date,
+): BlockMove[] => {
+  const day = resized.start.toDateString()
+  const below = chores
+    .filter(chore => !chore._pendingCreate)
+    .flatMap(chore =>
+      choreToEvents(chore).map(event => ({
+        chore,
+        start: event.start as Date,
+        end: event.end as Date,
+      })),
+    )
+    .filter(
+      ({ start }) =>
+        start.getTime() >= oldEnd.getTime() && start.toDateString() === day,
+    )
+    .sort((a, b) => a.start.getTime() - b.start.getTime())
+  const moves = [resized]
+  const newStarts = new Map<number, number>()
+  let cursor = resized.start.getTime() + resized.seconds * 1000
+  for (const block of below) {
+    const from = block.start.getTime()
+    if (from >= cursor) break
+    const start = new Date(newStarts.get(from) ?? cursor)
+    newStarts.set(from, start.getTime())
+    const seconds =
+      block.chore.id === resized.chore.id
+        ? resized.seconds
+        : blockSeconds(block.chore)
+    const remove =
+      (!endsPastDue(block.chore, block.end) &&
+        endsPastDue(block.chore, new Date(start.getTime() + seconds * 1000))) ||
+      !withBlockAt(block.chore, start, seconds)
+    moves.push({
+      chore: block.chore,
+      start,
+      seconds,
+      from: block.start,
+      remove,
+    })
+    if (!remove) cursor = Math.max(cursor, start.getTime() + seconds * 1000)
+  }
+  return moves.reverse()
+}
+
 export const dueMarkers = (chores: PlannerChore[]): EventInput[] => {
   const byInstant = new Map<number, PlannerChore[]>()
   for (const chore of chores) {
@@ -188,7 +246,7 @@ export const hasBlock = (chore: Chore): boolean => {
   return templatesOf(chore).some(template => {
     const offset = offsetMs(template)
     return (
-      isOffsetValid(chore, offset) &&
+      isOffsetValid(offset) &&
       (!isOverDue(chore) || due + offset >= startOfToday)
     )
   })
